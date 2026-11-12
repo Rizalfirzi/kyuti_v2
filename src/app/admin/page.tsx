@@ -84,6 +84,7 @@ export default function AdminPage() {
     localStorage.removeItem('kyuti_admin_auth');
     setIsAuthenticated(false);
     setPasscodeInput('');
+    window.location.href = '/';
   };
 
   const showNotification = (msg: string) => {
@@ -350,12 +351,12 @@ export default function AdminPage() {
               Verifikasi &amp; Masuk Dashboard
             </button>
 
-            <Link
+            <a
               href="/"
               className="block w-full py-2.5 text-xs font-semibold text-gray-400 hover:text-pink-600 transition"
             >
               ← Kembali ke Menu Toko
-            </Link>
+            </a>
           </form>
         </div>
       </div>
@@ -504,13 +505,13 @@ export default function AdminPage() {
 
         {/* Logout Bottom Link */}
         <div className="pt-6 border-t border-pink-100 space-y-2">
-          <Link
+          <a
             href="/"
             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-semibold text-gray-500 hover:text-pink-600 hover:bg-pink-50 transition"
           >
             <ExternalLink className="w-4 h-4" />
             <span>Lihat Website Toko</span>
-          </Link>
+          </a>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 transition"

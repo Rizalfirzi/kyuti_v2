@@ -252,6 +252,39 @@ if (navHubToggleBtn) {
     });
 }
 
+// Global Document-level event delegation: guarantees buttons ALWAYS respond
+// even after navigating to/from admin or dynamic DOM replacement
+document.addEventListener('click', (e) => {
+    const pBtn = e.target.closest('#openPricelistBtn');
+    if (pBtn) {
+        e.preventDefault();
+        openStoreView();
+        return;
+    }
+
+    const bBtn = e.target.closest('#backToHubBtn');
+    if (bBtn) {
+        e.preventDefault();
+        openHubView();
+        return;
+    }
+
+    const rBtn = e.target.closest('#openReviewsHubBtn, #openReviewsNavBtn');
+    if (rBtn) {
+        e.preventDefault();
+        openSheet('reviewSheet');
+        if (typeof fetchReviews === 'function') fetchReviews();
+        return;
+    }
+
+    const tBtn = e.target.closest('#trackOrderBtn');
+    if (tBtn) {
+        e.preventDefault();
+        openSheet('trackSheet');
+        return;
+    }
+});
+
 // =========================================================================
 // 2. OUTLET MANAGEMENT & PREMIUM OUTLET MODAL (Revisi Poin 9)
 // =========================================================================
@@ -2585,55 +2618,260 @@ const trackSubmitBtn = document.getElementById('trackSubmitBtn');
 const trackCodeInput = document.getElementById('trackCodeInput');
 const trackResultBox = document.getElementById('trackResultBox');
 
+function renderTrackingResult(ord) {
+    if (!ord) return;
+    const cleanNo = (ord.kopkenOrderNo || ord.code || '').replace('#', '').replace('KYUTI-', '');
+    const displayNo = ord.kopkenOrderNo ? ord.kopkenOrderNo.replace('#', '') : cleanNo;
+    const customer = ord.customerName || 'Customer';
+    const outlet = ord.outletName || 'Kopi Kenangan';
+    const status = ord.status || 'diterima';
+    const pickupTime = ord.pickup || 'Sekarang';
+
+    const statusRanks = {
+        'diterima': 1,
+        'diproses': 2,
+        'disiapkan': 3,
+        'siap': 4,
+        'selesai': 5
+    };
+    const currentRank = statusRanks[status] || 1;
+
+    // Status Banner definitions matching Gambar 2
+    let bannerHtml = '';
+    if (status === 'siap' || status === 'selesai') {
+        bannerHtml = `
+            <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(16,185,129,0.06)">
+                <div style="width:48px;height:48px;border-radius:16px;background:#D1FAE5;color:#059669;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🛍️</div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#047857">Siap Diambil</div>
+                    <div style="font-size:12px;color:#059669;margin-top:2px;line-height:1.35">Pesanan kamu sudah selesai dan siap untuk diambil.</div>
+                </div>
+            </div>
+        `;
+    } else if (status === 'disiapkan') {
+        bannerHtml = `
+            <div style="background:#FAF5FF;border:1px solid #E9D5FF;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(168,85,247,0.06)">
+                <div style="width:48px;height:48px;border-radius:16px;background:#F3E8FF;color:#9333EA;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">✨</div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#7E22CE">Sedang Disiapkan</div>
+                    <div style="font-size:12px;color:#9333EA;margin-top:2px;line-height:1.35">Barista sedang menyiapkan pesanan kamu.</div>
+                </div>
+            </div>
+        `;
+    } else if (status === 'diproses') {
+        bannerHtml = `
+            <div style="background:#FFF0F5;border:1px solid #FBCFE8;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(244,63,94,0.06)">
+                <div style="width:48px;height:48px;border-radius:16px;background:#FCE7F3;color:#DB2777;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">☕</div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#BE185D">Pesanan Diproses</div>
+                    <div style="font-size:12px;color:#DB2777;margin-top:2px;line-height:1.35">Pesanan kamu sedang diproses oleh outlet.</div>
+                </div>
+            </div>
+        `;
+    } else {
+        bannerHtml = `
+            <div style="background:#FFF5F7;border:1px solid #FECDD3;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(244,63,94,0.06)">
+                <div style="width:48px;height:48px;border-radius:16px;background:#FFE4E8;color:#E11D48;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">✓</div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#BE123C">Pesanan Diterima</div>
+                    <div style="font-size:12px;color:#E11D48;margin-top:2px;line-height:1.35">Pesanan kamu sudah kami terima dan menunggu diproses.</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Timeline Steps matching Gambar 2
+    const steps = [
+        { rank: 1, key: 'diterima', title: 'Pesanan Diterima', desc: 'Pesanan kamu sudah kami terima.', icon: '✓' },
+        { rank: 2, key: 'diproses', title: 'Pesanan Diproses', desc: 'Pesanan sedang diproses oleh outlet.', icon: '☕' },
+        { rank: 3, key: 'disiapkan', title: 'Sedang Disiapkan', desc: 'Barista sedang menyiapkan pesanan kamu.', icon: '✨' },
+        { rank: 4, key: 'siap', title: 'Siap Diambil', desc: currentRank >= 4 ? 'Pesanan kamu sudah selesai dan siap untuk diambil.' : 'Pesanan kamu akan segera siap untuk diambil.', icon: '🛍️' },
+    ];
+
+    let stepsHtml = '';
+    steps.forEach((s) => {
+        const isPassed = currentRank > s.rank;
+        const isCurrent = currentRank === s.rank;
+
+        const hist = ord.statusHistory ? ord.statusHistory.find(h => h.status === s.key) : null;
+        const stepTime = hist?.time || (isPassed || isCurrent ? '14.20' : '');
+        const stepPhoto = hist?.proofPhotoUrl || (isCurrent ? ord.proofPhotoUrl : null);
+
+        let dotBg = '#F3F4F6';
+        let dotColor = '#9CA3AF';
+        let titleColor = '#9CA3AF';
+        let descColor = '#D1D5DB';
+
+        if (isPassed) {
+            dotBg = '#EC4899';
+            dotColor = '#FFFFFF';
+            titleColor = '#1F2937';
+            descColor = '#6B7280';
+        } else if (isCurrent) {
+            if (status === 'siap') {
+                dotBg = '#10B981';
+                dotColor = '#FFFFFF';
+                titleColor = '#047857';
+            } else {
+                dotBg = '#EC4899';
+                dotColor = '#FFFFFF';
+                titleColor = '#DB2777';
+            }
+            descColor = '#4B5563';
+        }
+
+        let photoBoxHtml = '';
+        if ((isCurrent || (isPassed && s.key === 'diproses')) && stepPhoto) {
+            photoBoxHtml = `
+                <div style="margin-top:10px;background:#FFF0F5;border-radius:18px;padding:12px;border:1px solid #FFE4E8">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <span style="font-size:11px;font-weight:700;color:#374151;display:flex;align-items:center;gap:4px">
+                            📷 Bukti Pesanan
+                        </span>
+                        ${stepTime ? `<span style="font-size:10px;color:#9CA3AF">${stepTime}</span>` : ''}
+                    </div>
+                    <div style="position:relative;border-radius:14px;overflow:hidden;border:1px solid #FECDD3;box-shadow:0 2px 6px rgba(0,0,0,0.04);cursor:pointer;aspect-ratio:16/9;background:#F9FAFB" onclick="window.open('${stepPhoto}', '_blank')">
+                        <img src="${stepPhoto}" alt="Bukti Pesanan" style="width:100%;height:100%;object-fit:cover;display:block">
+                        <div style="position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,0.6);color:#fff;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:600">
+                            🔍 Klik Perbesar
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        stepsHtml += `
+            <div style="position:relative;padding-left:36px;margin-bottom:20px;text-align:left">
+                <div style="position:absolute;left:0;top:2px;width:24px;height:24px;border-radius:50%;background:${dotBg};color:${dotColor};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;box-shadow:0 2px 5px rgba(0,0,0,0.06);z-index:2">
+                    ${s.icon}
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <b style="font-size:13px;color:${titleColor}">${s.title}</b>
+                    ${stepTime ? `<span style="font-size:11px;color:#9CA3AF;font-weight:500">${stepTime}</span>` : ''}
+                </div>
+                <div style="font-size:11px;color:${descColor};margin-top:2px">${s.desc}</div>
+                ${photoBoxHtml}
+            </div>
+        `;
+    });
+
+    // Items list (if available)
+    let itemsHtml = '';
+    if (ord.items && ord.items.length > 0) {
+        let rows = ord.items.map(it => `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid #FFF0F3;font-size:12px">
+                <div>
+                    <b style="color:#1F2937">${it.qty}x ${it.name}</b>
+                    ${(it.size || it.ice || it.sugar) ? `<div style="font-size:10px;color:#9CA3AF">${[it.size, it.ice, it.sugar].filter(Boolean).join(', ')}</div>` : ''}
+                </div>
+                <span style="font-weight:600;color:#374151">Rp ${(it.subtotal || it.price || 0).toLocaleString('id-ID')}</span>
+            </div>
+        `).join('');
+
+        itemsHtml = `
+            <div style="background:#fff;border-radius:20px;padding:16px;border:1px solid #FFE4E8;margin-bottom:14px;text-align:left">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #FFF0F3">
+                    <b style="font-size:12px;color:#1F2937">Detail Pesanan</b>
+                    <span style="font-size:10px;color:#9CA3AF">Pickup: ${pickupTime}</span>
+                </div>
+                ${rows}
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:13px;font-weight:800;color:#BE185D">
+                    <span>Total Pembayaran</span>
+                    <span>Rp ${(ord.total || 0).toLocaleString('id-ID')}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    const waAdminPhone = normalizeWaPhone(window.INITIAL_DATA?.adminPhone || '628972276154');
+    const waText = encodeURIComponent(`Halo Kak Admin Kedai Kyuti, saya mau tanya status pesanan #${displayNo} (${customer})`);
+    const waUrl = `https://wa.me/${waAdminPhone}?text=${waText}`;
+
+    trackResultBox.innerHTML = `
+        <div style="animation:fadeIn 0.3s ease;text-align:left">
+            <!-- 1. Order Number Box (Matches Gambar 2) -->
+            <div style="background:#fff;border-radius:24px;padding:18px 20px;box-shadow:0 2px 10px rgba(0,0,0,0.03);border:1px solid #FFE4E8;margin-bottom:12px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div>
+                        <div style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.5px">Nomor Order Kopi Kenangan</div>
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+                            <span style="font-size:26px;font-weight:900;color:#111827;letter-spacing:-0.5px">#${displayNo}</span>
+                            <button type="button" onclick="navigator.clipboard.writeText('${displayNo}');showToast('Nomor order #${displayNo} disalin! ♡')" style="border:none;background:#FFF0F3;color:#E11D48;cursor:pointer;padding:6px 8px;border-radius:10px;font-size:11px;display:inline-flex;align-items:center;transition:all 0.2s" title="Salin Nomor Order">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div style="text-align:right">
+                        <span style="display:inline-block;padding:4px 12px;background:#FFE4E8;color:#BE185D;font-weight:700;font-size:11px;border-radius:999px">${customer}</span>
+                        <div style="font-size:10px;color:#9CA3AF;margin-top:4px">${outlet}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Status Banner (Matches Gambar 2) -->
+            ${bannerHtml}
+
+            <!-- 3. Stepper Timeline Card (Matches Gambar 2) -->
+            <div style="background:#fff;border-radius:24px;padding:20px;border:1px solid #FFE4E8;margin-bottom:12px;position:relative">
+                <div style="position:relative;padding-left:4px">
+                    <!-- Vertical connecting line -->
+                    <div style="position:absolute;left:11px;top:10px;bottom:10px;width:2px;background:#FCE7F3"></div>
+                    ${stepsHtml}
+                </div>
+                <div style="margin-top:14px;padding-top:12px;border-top:1px solid #FFF0F3;display:flex;align-items:center;gap:6px;font-size:11px;color:#EC4899">
+                    <span>♡</span>
+                    <span>Foto bukti akan ditampilkan setiap kali status pesanan diperbarui ♡</span>
+                </div>
+            </div>
+
+            <!-- 4. Detail Items (if any) -->
+            ${itemsHtml}
+
+            <!-- 5. Actions (Full Page Link & WhatsApp) -->
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+                <a href="/track/${displayNo}" class="btn btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:18px;font-size:13px;font-weight:700;text-decoration:none">
+                    <span>Lihat Halaman Lacak Penuh ↗</span>
+                </a>
+                <a href="${waUrl}" target="_blank" rel="noopener noreferrer" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:18px;font-size:12px;font-weight:700;background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;text-decoration:none;transition:all 0.2s">
+                    <span>💬 Hubungi Admin via WhatsApp</span>
+                </a>
+            </div>
+        </div>
+    `;
+}
+
 if (trackSubmitBtn && trackCodeInput && trackResultBox) {
-    trackSubmitBtn.addEventListener('click', () => {
-        const code = trackCodeInput.value.trim().toUpperCase();
+    const handleTrackSubmit = () => {
+        const raw = trackCodeInput.value.trim();
+        const code = raw.toUpperCase().replace('#', '');
         if (!code) {
-            showToast('Silakan ketik kode pesanan.');
+            showToast('Silakan ketik nomor order atau kode pesanan.');
             return;
         }
 
         trackSubmitBtn.disabled = true;
         trackSubmitBtn.textContent = 'Mencari...';
 
-        fetch(`api/track.php?code=${encodeURIComponent(code)}`)
+        fetch(`/api/track?code=${encodeURIComponent(code)}`)
             .then(res => res.json())
             .then(res => {
                 if (res.success && res.order) {
-                    const ord = res.order;
-                    trackResultBox.innerHTML = `
-                        <div style="background:var(--bg-page);border-radius:var(--radius-lg);padding:16px;border:1px solid var(--border-color);animation:fadeIn 0.3s ease">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                                <b style="font-size:14px;color:var(--brand-primary-dark)">${ord.code}</b>
-                                <span class="pill pill-open">Sedang Disiapkan</span>
-                            </div>
-                            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${ord.statusDesc || 'Barista sedang meracik pesananmu.'}</div>
-                            <div style="border-top:1px dashed var(--border-color);padding-top:10px;font-size:12px">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                                    <span>Outlet:</span>
-                                    <b>${ord.outletName || 'Kopi Kenangan'}</b>
-                                </div>
-                                <div style="display:flex;justify-content:space-between">
-                                    <span>Waktu Pickup:</span>
-                                    <b>${ord.pickup || 'Sekarang'}</b>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    renderTrackingResult(res.order);
                 } else {
                     trackResultBox.innerHTML = `
-                        <div class="empty-box">
-                            <div class="empty-icon">✕</div>
-                            <p>${res.message || 'Pesanan tidak ditemukan.'}</p>
+                        <div class="empty-box" style="padding:28px 16px;text-align:center">
+                            <div class="empty-icon" style="font-size:32px;margin-bottom:8px">🔍</div>
+                            <b style="font-size:14px;color:#1F2937">Pesanan Belum Ditemukan</b>
+                            <p style="font-size:12px;color:#6B7280;margin-top:4px">Nomor order <span style="color:#BE185D;font-weight:bold">#${raw}</span> belum tercatat atau belum diproses oleh admin.</p>
                         </div>
                     `;
                 }
             })
             .catch(() => {
                 trackResultBox.innerHTML = `
-                    <div class="empty-box">
-                        <div class="empty-icon">⚠️</div>
-                        <p>Gagal menghubungi server pelacakan.</p>
+                    <div class="empty-box" style="padding:28px 16px;text-align:center">
+                        <div class="empty-icon" style="font-size:32px;margin-bottom:8px">⚠️</div>
+                        <p style="font-size:12px;color:#EF4444">Gagal menghubungi server pelacakan.</p>
                     </div>
                 `;
             })
@@ -2641,6 +2879,14 @@ if (trackSubmitBtn && trackCodeInput && trackResultBox) {
                 trackSubmitBtn.disabled = false;
                 trackSubmitBtn.textContent = 'Lacak';
             });
+    };
+
+    trackSubmitBtn.addEventListener('click', handleTrackSubmit);
+    trackCodeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleTrackSubmit();
+        }
     });
 }
 

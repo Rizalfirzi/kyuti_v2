@@ -9,6 +9,7 @@ import {
   fetchOutletsData,
   fetchOutletMenu,
 } from '@/lib/kopken-api';
+import LegacyHtmlContainer from '@/components/LegacyHtmlContainer';
 
 export const metadata: Metadata = {
   title: 'Kedai Kyuti (kedaikyuti.my.id) — JASDOR KOPI KENANGAN',
@@ -164,11 +165,5 @@ export default async function Page() {
 
   const finalHtml = rawHtml + initialDataScript;
 
-  return (
-    <div
-      style={{ display: 'contents' }}
-      dangerouslySetInnerHTML={{ __html: finalHtml }}
-      suppressHydrationWarning
-    />
-  );
+  return <LegacyHtmlContainer html={finalHtml} initialData={initialData} />;
 }

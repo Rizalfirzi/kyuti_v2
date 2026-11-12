@@ -52,6 +52,18 @@ combined = combined.replace(
   '<a href="/admin" class="open-admin-trigger-link" id="openAdminPricingBtn" title="Halaman Admin" aria-label="Halaman Admin" style="background:transparent;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:4px;opacity:0.6;transition:var(--transition);text-decoration:none">\n                        <span>⚙️</span>\n                    </a>'
 );
 
+// 1. Replace header logo with brand-badge-img (keeping only branch A, completely eliminating branch B)
+combined = combined.replace(
+  /<\?php\s*if\s*\(!empty\(\$logoImg\)\):[\s\S]*?<\?php\s*else:[\s\S]*?<\?php\s*endif;\s*\?>/i,
+  '<img src="/assets/img/logo/kyuti.jpeg" alt="Kedai Kyuti" class="brand-badge-img">'
+);
+
+// 2. Replace bio card avatar with bio-avatar-img (keeping only branch A, completely eliminating branch B)
+combined = combined.replace(
+  /<\?php\s*if\s*\(!empty\(\$logoImg\)\):[\s\S]*?<\?php\s*else:[\s\S]*?<\?php\s*endif;\s*\?>/i,
+  '<img src="/assets/img/logo/kyuti.jpeg" alt="Kedai Kyuti" class="bio-avatar-img">'
+);
+
 // Replacements for PHP tags
 const replacements = [
   [/<\?=\s*htmlspecialchars\(\$storeName[^)]*\)\s*\?>/g, 'Kedai Kyuti'],
@@ -89,7 +101,6 @@ const replacements = [
   [/<\?=\s*htmlspecialchars\(\$initialOutlet\['hours'\][^)]*\)\s*\?>/g, 'Buka Setiap Hari'],
   [/<\?=\s*\(!empty\(\$initialOutlet\['canOrder'\]\) \? 'pill-open' : 'pill-closed'\)\s*\?>/g, 'pill-open'],
   [/<\?=\s*!empty\(\$initialOutlet\['isPremium'\]\)\s*\?\s*''\s*:\s*'display:none;'\s*\?>/g, 'display:none;'],
-  [/<\?php\s*if\s*\(!empty\(\$logoImg\)\):[\s\S]*?<\?php\s*endif;\s*\?>/g, '<img src="/assets/img/logo/kyuti.jpeg" alt="Kedai Kyuti" class="bio-avatar-img">'],
   [/<\?php[\s\S]*?\?>/g, ''],
 ];
 

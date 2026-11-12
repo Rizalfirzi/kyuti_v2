@@ -693,10 +693,10 @@ export async function fetchOutletMenu(
   let apiCategories: any[] = [];
 
   try {
-    const res = await fetch(`${API_BASE_URL}/kopken/menu?outlet=${encodeURIComponent(outletCode)}`, {
-      cache: forceRefresh ? 'no-store' : 'default',
-      next: { revalidate: forceRefresh ? 0 : 180 },
-    });
+    const fetchOptions: any = forceRefresh
+      ? { cache: 'no-store' }
+      : { next: { revalidate: 180 } };
+    const res = await fetch(`${API_BASE_URL}/kopken/menu?outlet=${encodeURIComponent(outletCode)}`, fetchOptions);
 
     if (res.ok) {
       const data = await res.json();

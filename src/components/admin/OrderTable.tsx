@@ -158,7 +158,7 @@ export function OrderTable({
             <button
               type="button"
               onClick={onOpenCreate}
-              className="px-6 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] text-white font-bold text-xs rounded-full shadow-[0_6px_20px_rgba(233,45,121,0.35)] transition flex items-center gap-1.5 active:scale-95 border-0"
+              className="px-6 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] text-white font-bold text-xs rounded-full shadow-[0_6px_20px_rgba(233,45,121,0.35)] transition flex items-center gap-1.5 active:scale-95 border-0 cursor-pointer"
             >
               <span className="text-base font-bold leading-none">+</span> Tambah Pesanan
             </button>
@@ -216,7 +216,7 @@ export function OrderTable({
                 setActiveFilter(tab.label);
                 setCurrentPage(1);
               }}
-              className={`px-5 py-2 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center border-0 ${
+              className={`px-5 py-2 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center border-0 cursor-pointer ${
                 isActive
                   ? 'bg-[#E92D79] text-white shadow-xs'
                   : 'bg-[#FFF0F5] hover:bg-[#FFE4EE] text-gray-700'
@@ -309,7 +309,7 @@ export function OrderTable({
                           target="_blank"
                           rel="noreferrer"
                           title="Buka Link Tracking Customer"
-                          className="text-gray-600 hover:text-black transition"
+                          className="text-gray-600 hover:text-black transition cursor-pointer"
                         >
                           <Eye className="w-4 h-4 stroke-[1.8]" />
                         </a>
@@ -318,7 +318,7 @@ export function OrderTable({
                           type="button"
                           onClick={() => onOpenEdit(order)}
                           title="Edit Status & Foto Bukti"
-                          className="text-gray-600 hover:text-blue-600 transition"
+                          className="text-gray-600 hover:text-blue-600 transition cursor-pointer border-0 bg-transparent"
                         >
                           <Pencil className="w-4 h-4 stroke-[1.8]" />
                         </button>
@@ -327,7 +327,7 @@ export function OrderTable({
                           type="button"
                           onClick={() => onDeleteOrder(order.orderCode)}
                           title="Hapus Pesanan"
-                          className="text-[#E92D79] hover:text-red-700 transition"
+                          className="text-[#E92D79] hover:text-red-700 transition cursor-pointer border-0 bg-transparent"
                         >
                           <Trash2 className="w-4 h-4 stroke-[1.8]" />
                         </button>
@@ -351,7 +351,7 @@ export function OrderTable({
             type="button"
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={safeCurrentPage <= 1}
-            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold border-0"
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold border-0 cursor-pointer disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -360,7 +360,7 @@ export function OrderTable({
               key={pNum}
               type="button"
               onClick={() => setCurrentPage(pNum)}
-              className={`w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center transition border-0 ${
+              className={`w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center transition border-0 cursor-pointer ${
                 pNum === safeCurrentPage
                   ? 'bg-[#E92D79] text-white shadow-xs'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -373,7 +373,7 @@ export function OrderTable({
             type="button"
             onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={safeCurrentPage >= totalPages}
-            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold border-0"
+            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold border-0 cursor-pointer disabled:cursor-not-allowed"
           >
             <ChevronRight className="w-4 h-4" />
           </button>

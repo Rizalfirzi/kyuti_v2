@@ -40,7 +40,7 @@ export function AdminHeader({ onToggleMobileSidebar, onRefresh, loading }: Heade
               type="button"
               onClick={onRefresh}
               title="Refresh Data"
-              className="p-2 text-gray-500 hover:text-[#E92D79] hover:bg-[#FFE8F0] rounded-xl transition"
+              className="p-2 text-gray-500 hover:text-[#E92D79] hover:bg-[#FFE8F0] rounded-xl transition cursor-pointer border-0 bg-transparent"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#E92D79]' : ''}`} />
             </button>

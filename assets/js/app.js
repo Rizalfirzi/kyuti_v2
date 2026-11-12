@@ -4,8 +4,9 @@
  * Handles State, API Integration, Modals, Bundling, Cart, Pickup Time & WhatsApp Checkout.
  */
 
+(function () {
 // Initialize Application State
-const AppState = {
+var AppState = window.AppState = window.AppState || {
     view: 'hub', // 'hub' or 'store'
     outlet: window.INITIAL_DATA?.outlet || null,
     outlets: window.INITIAL_DATA?.outlets || [],
@@ -4796,14 +4797,21 @@ function initBgmPlayer() {
 }
 
 // Initial Boot
-document.addEventListener('DOMContentLoaded', () => {
-    updateOutletHeader();
-    renderMenu();
-    updateCartUI();
-    checkWelcomePopup();
-    initAdminPricingFeature();
-    initWifiFeature();
-    initWebHoursFeature();
-    initReviewsFeature();
-    initBgmPlayer();
-});
+function bootKyutiApp() {
+    if (typeof updateOutletHeader === 'function') updateOutletHeader();
+    if (typeof renderMenu === 'function') renderMenu();
+    if (typeof updateCartUI === 'function') updateCartUI();
+    if (typeof checkWelcomePopup === 'function') checkWelcomePopup();
+    if (typeof initAdminPricingFeature === 'function') initAdminPricingFeature();
+    if (typeof initWifiFeature === 'function') initWifiFeature();
+    if (typeof initWebHoursFeature === 'function') initWebHoursFeature();
+    if (typeof initReviewsFeature === 'function') initReviewsFeature();
+    if (typeof initBgmPlayer === 'function') initBgmPlayer();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootKyutiApp);
+} else {
+    setTimeout(bootKyutiApp, 10);
+}
+})();

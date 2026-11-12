@@ -54,7 +54,7 @@ export function OrderModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100 transition border-0 bg-transparent"
+            className="p-1.5 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-100 transition border-0 bg-transparent cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -170,14 +170,14 @@ export function OrderModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition border-0"
+              className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition border-0 cursor-pointer"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={savingOrder || uploadingPhoto}
-              className="px-8 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-pink-200 transition border-0"
+              className="px-8 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-pink-200 transition border-0 cursor-pointer"
             >
               {savingOrder ? 'Menyimpan...' : 'Simpan'}
             </button>

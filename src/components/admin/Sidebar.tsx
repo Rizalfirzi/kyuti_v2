@@ -93,7 +93,7 @@ export function AdminSidebar({
                     setActiveMenu(item.id);
                     setMobileOpen(false);
                   }}
-                  className={`relative w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left ${
+                  className={`relative w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left cursor-pointer ${
                     isActive
                       ? 'bg-[#FFE8F0] text-[#E92D79]'
                       : 'text-gray-700 hover:text-[#E92D79] hover:bg-[#FFF5F8]'
@@ -128,7 +128,7 @@ export function AdminSidebar({
                 openCreateModal();
                 setMobileOpen(false);
               }}
-              className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-[#FFF5F8] transition-all text-left"
+              className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-[#FFF5F8] transition-all text-left cursor-pointer"
             >
               <PlusSquare className="w-4 h-4 text-gray-500" />
               <span>Tambah Pesanan</span>
@@ -146,7 +146,7 @@ export function AdminSidebar({
           <div className="space-y-1">
             <a
               href="/"
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-gray-500 hover:text-[#E92D79] hover:bg-pink-50/50 transition"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-gray-500 hover:text-[#E92D79] hover:bg-pink-50/50 transition cursor-pointer"
             >
               <ExternalLink className="w-4 h-4" />
               <span>Lihat Website Toko</span>
@@ -154,7 +154,7 @@ export function AdminSidebar({
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-red-50/50 transition text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-red-50/50 transition text-left cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>Keluar</span>

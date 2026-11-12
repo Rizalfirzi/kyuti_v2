@@ -160,7 +160,6 @@ export default async function Page() {
       window.INITIAL_DATA = ${JSON.stringify(initialData)};
     </script>
     <script src="https://www.youtube.com/iframe_api"></script>
-    <script src="/assets/js/app.js"></script>
   `;
 
   const finalHtml = rawHtml + initialDataScript;

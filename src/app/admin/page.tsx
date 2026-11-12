@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Check,
   CheckCheck,
+  CheckCircle2,
   Bike,
   Clock,
   Music,
@@ -36,6 +37,11 @@ import {
   TrendingUp,
   Users,
   Percent,
+  Bell,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/lib/types';
 
@@ -55,6 +61,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('Semua');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const pageSize = 5;
 
   // Modal State for Orders
   const [modalOpen, setModalOpen] = useState(false);
@@ -386,44 +394,50 @@ export default function AdminPage() {
     }
   };
 
-  // Render Status Badge
+  // Render Status Badge (Matches Exact Reference Image & User Specs)
   const renderStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case 'diproses':
         return (
-          <span className="inline-block px-3 py-1 bg-[#FEF3C7] text-[#D97706] text-xs font-bold rounded-full border border-[#FDE68A]">
-            Pesanan Diproses
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FFF8E7] text-[#D97706] text-xs font-bold rounded-full border border-[#FDE68A]">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Pesanan Diproses</span>
           </span>
         );
       case 'siap':
         return (
-          <span className="inline-block px-3 py-1 bg-[#DCFCE7] text-[#15803D] text-xs font-bold rounded-full border border-[#BBF7D0]">
-            Siap Diambil
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#EDFDF2] text-[#15803D] text-xs font-bold rounded-full border border-[#BBF7D0]">
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#15803D]" />
+            <span>Siap Diambil</span>
           </span>
         );
       case 'disiapkan':
         return (
-          <span className="inline-block px-3 py-1 bg-[#FCE7F3] text-[#DB2777] text-xs font-bold rounded-full border border-[#FBCFE8]">
-            Sedang Disiapkan
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FFF0F5] text-[#E92D79] text-xs font-bold rounded-full border border-[#FBCFE8]">
+            <Sparkles className="w-3.5 h-3.5 text-[#E92D79]" />
+            <span>Sedang Disiapkan</span>
           </span>
         );
       case 'diantar':
         return (
-          <span className="inline-block px-3 py-1 bg-[#E0F2FE] text-[#0284C7] text-xs font-bold rounded-full border border-[#BAE6FD]">
-            🛵 Pesanan Diantar
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F0F9FF] text-[#0284C7] text-xs font-bold rounded-full border border-[#BAE6FD]">
+            <Bike className="w-3.5 h-3.5 text-[#0284C7]" />
+            <span>Pesanan Diantar</span>
           </span>
         );
       case 'selesai':
         return (
-          <span className="inline-block px-3 py-1 bg-[#DCFCE7] text-[#15803D] text-xs font-bold rounded-full border border-[#BBF7D0]">
-            🎉 Pesanan Diterima
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#ECFDF5] text-[#047857] text-xs font-bold rounded-full border border-[#A7F3D0]">
+            <CheckCheck className="w-3.5 h-3.5 text-[#047857]" />
+            <span>Pesanan Diterima</span>
           </span>
         );
       case 'diterima':
       default:
         return (
-          <span className="inline-block px-3 py-1 bg-[#FCE7F3] text-[#DB2777] text-xs font-bold rounded-full border border-[#FBCFE8]">
-            Pesanan Diterima
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#F5F3FF] text-[#7C3AED] text-xs font-bold rounded-full border border-[#DDD6FE]">
+            <Check className="w-3.5 h-3.5 text-[#7C3AED]" />
+            <span>Pesanan Diterima</span>
           </span>
         );
     }
@@ -447,6 +461,24 @@ export default function AdminPage() {
     if (activeFilter === 'Pesanan Selesai' || activeFilter === 'Pesanan Diterima (Selesai)') return order.status === 'selesai';
     return true;
   });
+
+  // Dynamic status counts for filter pills (Matching exact reference image badges)
+  const statusCounts = useMemo(() => {
+    return {
+      all: orders.length,
+      diterima: orders.filter((o) => o.status === 'diterima').length,
+      diproses: orders.filter((o) => o.status === 'diproses').length,
+      disiapkan: orders.filter((o) => o.status === 'disiapkan').length,
+      siap: orders.filter((o) => o.status === 'siap').length,
+      diantar: orders.filter((o) => o.status === 'diantar').length,
+      selesai: orders.filter((o) => o.status === 'selesai').length,
+    };
+  }, [orders]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const paginatedOrders = filteredOrders.slice(startIndex, startIndex + pageSize);
 
   const formatUpdatedAt = (dateStr: string) => {
     try {
@@ -769,7 +801,11 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF5F7] flex flex-col md:flex-row font-sans text-gray-800">
+    <div className="relative min-h-screen bg-[#FFF0F5] overflow-x-hidden flex flex-col md:flex-row font-sans text-gray-800">
+      {/* Background Soft Pink Glow / Waves */}
+      <div className="w-[450px] h-[350px] bg-[#FFE0EC] rounded-full blur-3xl opacity-50 absolute -top-20 -right-20 pointer-events-none" />
+      <div className="w-[450px] h-[350px] bg-[#FFE0EC] rounded-full blur-3xl opacity-40 absolute -bottom-20 -left-20 pointer-events-none" />
+
       {/* Toast Notification */}
       {notification && (
         <div className="fixed top-5 right-5 z-50 bg-white border border-pink-200 shadow-xl rounded-2xl px-5 py-3 text-xs font-bold text-pink-600 flex items-center gap-2 animate-bounce">
@@ -794,30 +830,29 @@ export default function AdminPage() {
         </div>
         <button
           onClick={openCreateModal}
-          className="px-3 py-1.5 bg-[#DB2777] hover:bg-pink-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1"
+          className="px-3 py-1.5 bg-[#E92D79] hover:bg-[#D81B60] text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1"
         >
           <PlusCircle className="w-3.5 h-3.5" /> Pesanan
         </button>
       </div>
 
-      {/* Left Sidebar (Presisi & Aestetik) */}
+      {/* Left Sidebar (Modern, Clean, Presisi & Aestetik) */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-[#FFF5F7] border-r border-pink-100 flex flex-col justify-between p-6 z-50 transition-transform duration-200 ${
-          mobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
+        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-transparent flex flex-col justify-between p-6 z-50 transition-transform duration-200 ${
+          mobileSidebarOpen ? 'translate-x-0 bg-[#FFF0F5] shadow-2xl' : '-translate-x-full md:translate-x-0'
         }`}
       >
         <div>
           {/* Logo / Brand Header */}
           <div className="flex items-center justify-between pb-8">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-2xl bg-white shadow-sm border border-pink-100 flex items-center justify-center text-pink-600 font-bold text-base">
+              <div className="w-10 h-10 rounded-2xl bg-white shadow-sm border border-pink-100 flex items-center justify-center text-pink-600 font-bold text-lg">
                 ☕
               </div>
               <div>
-                <h1 className="font-black text-gray-900 text-base tracking-tight flex items-center gap-1">
-                  Kedai Kyuti <span className="text-pink-500 text-sm">♡</span>
+                <h1 className="font-black text-gray-900 text-base tracking-tight flex items-center gap-1.5">
+                  Kedai Kyuti <span className="text-[#E92D79] text-sm">♡</span>
                 </h1>
-                <p className="text-[10px] text-gray-400 font-medium">Panel Manajemen Lengkap</p>
               </div>
             </div>
             {mobileSidebarOpen && (
@@ -831,40 +866,50 @@ export default function AdminPage() {
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-1.5">
+          <nav className="space-y-2">
             {/* 1. Dashboard */}
             <button
               onClick={() => {
                 setActiveMenu('dashboard');
                 setMobileSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'dashboard'
-                  ? 'bg-white text-gray-900 shadow-sm border border-pink-100'
-                  : 'text-gray-600 hover:text-pink-600 hover:bg-pink-50/70'
+                  ? 'bg-[#FFE8F0] text-[#E92D79]'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
               }`}
             >
-              <LayoutDashboard className={`w-4 h-4 ${activeMenu === 'dashboard' ? 'text-pink-600' : 'text-gray-500'}`} />
+              {activeMenu === 'dashboard' && (
+                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+              )}
+              <LayoutDashboard className={`w-4 h-4 ${activeMenu === 'dashboard' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
               <span>Dashboard</span>
             </button>
 
-            {/* 2. Pesanan (Daftar Pesanan) */}
+            {/* 2. Pesanan (Daftar Pesanan - Active in Ref Image) */}
             <button
               onClick={() => {
                 setActiveMenu('orders');
                 setMobileSidebarOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'orders'
-                  ? 'bg-[#FCE7F3] text-[#DB2777] shadow-sm font-black'
-                  : 'text-gray-600 hover:text-pink-600 hover:bg-pink-50/70'
+                  ? 'bg-[#FFE8F0] text-[#E92D79]'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
               }`}
             >
-              <div className="flex items-center gap-3">
-                <Package className={`w-4 h-4 ${activeMenu === 'orders' ? 'text-[#DB2777]' : 'text-gray-500'}`} />
+              {activeMenu === 'orders' && (
+                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+              )}
+              <div className="flex items-center gap-3.5">
+                <Package className={`w-4 h-4 ${activeMenu === 'orders' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
                 <span>Pesanan</span>
               </div>
-              <span className="text-[10px] bg-white px-2 py-0.5 rounded-full text-pink-600 shadow-xs border border-pink-100 font-bold">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                activeMenu === 'orders'
+                  ? 'bg-white text-[#E92D79] shadow-xs'
+                  : 'bg-white/80 text-gray-500'
+              }`}>
                 {orders.length}
               </span>
             </button>
@@ -875,7 +920,7 @@ export default function AdminPage() {
                 openCreateModal();
                 setMobileSidebarOpen(false);
               }}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-gray-600 hover:text-pink-600 hover:bg-pink-50/70 transition text-left"
+              className="relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-white/60 transition text-left"
             >
               <PlusCircle className="w-4 h-4 text-gray-500" />
               <span>Tambah Pesanan</span>
@@ -887,13 +932,16 @@ export default function AdminPage() {
                 setActiveMenu('reports');
                 setMobileSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'reports'
-                  ? 'bg-white text-gray-900 shadow-sm border border-pink-100'
-                  : 'text-gray-600 hover:text-pink-600 hover:bg-pink-50/70'
+                  ? 'bg-[#FFE8F0] text-[#E92D79]'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
               }`}
             >
-              <FileBarChart className={`w-4 h-4 ${activeMenu === 'reports' ? 'text-pink-600' : 'text-gray-500'}`} />
+              {activeMenu === 'reports' && (
+                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+              )}
+              <FileBarChart className={`w-4 h-4 ${activeMenu === 'reports' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
               <span>Laporan</span>
             </button>
 
@@ -903,105 +951,169 @@ export default function AdminPage() {
                 setActiveMenu('settings');
                 setMobileSidebarOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'settings'
-                  ? 'bg-white text-gray-900 shadow-sm border border-pink-100'
-                  : 'text-gray-600 hover:text-pink-600 hover:bg-pink-50/70'
+                  ? 'bg-[#FFE8F0] text-[#E92D79]'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
               }`}
             >
-              <Settings className={`w-4 h-4 ${activeMenu === 'settings' ? 'text-pink-600' : 'text-gray-500'}`} />
+              {activeMenu === 'settings' && (
+                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+              )}
+              <Settings className={`w-4 h-4 ${activeMenu === 'settings' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
               <span>Pengaturan &amp; Fee</span>
             </button>
           </nav>
         </div>
 
-        {/* Logout Bottom Link */}
-        <div className="pt-6 border-t border-pink-100 space-y-2">
-          <a
-            href="/"
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-semibold text-gray-500 hover:text-pink-600 hover:bg-pink-50 transition"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span>Lihat Website Toko</span>
-          </a>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-2xl text-xs font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 transition"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Keluar</span>
-          </button>
+        {/* Bottom Section with Floating Heart and Logout */}
+        <div className="pt-6 relative">
+          {/* Subtle floating heart decoration */}
+          <div className="absolute right-2 bottom-12 pointer-events-none opacity-40">
+            <Heart className="w-5 h-5 text-[#E92D79] stroke-[1.5]" />
+          </div>
+
+          <div className="space-y-1.5">
+            <a
+              href="/"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl text-xs font-semibold text-gray-500 hover:text-[#E92D79] hover:bg-white/50 transition"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Lihat Website Toko</span>
+            </a>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-white/50 transition"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Keluar</span>
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 max-w-6xl w-full">
+      <main className="flex-1 p-4 md:p-8 max-w-6xl w-full z-10">
+        {/* Top Header Bar outside Card (Bell Badge + Admin Avatar Dropdown) */}
+        <div className="flex items-center justify-end gap-4 mb-4">
+          {/* Notification Bell with Badge */}
+          <div className="relative p-2 rounded-full hover:bg-white/80 transition cursor-pointer text-gray-700">
+            <Bell className="w-5 h-5" />
+            <span className="absolute top-1 right-1 w-4 h-4 bg-[#E92D79] text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-xs">
+              3
+            </span>
+          </div>
+
+          {/* Admin Profile */}
+          <div className="flex items-center gap-2.5 cursor-pointer pl-1.5 pr-3 py-1 bg-white/80 hover:bg-white rounded-full transition shadow-xs border border-pink-100">
+            <img
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=face"
+              alt="Admin"
+              className="w-8 h-8 rounded-full object-cover ring-2 ring-pink-200"
+            />
+            <span className="text-xs font-bold text-gray-800">Admin</span>
+            <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+          </div>
+        </div>
+
         {/* ========================================================================= */}
-        {/* VIEW 1: DAFTAR PESANAN (Matches Image 1 & 2 Layout)                      */}
+        {/* VIEW 1: DAFTAR PESANAN (Matches Reference Image UI/UX)                   */}
         {/* ========================================================================= */}
         {activeMenu === 'orders' && (
-          <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-pink-100 min-h-[calc(100vh-4rem)]">
-            {/* Header Row: Title & "+ Tambah Pesanan" Button */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-pink-50">
-              <div>
-                <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight">Daftar Pesanan</h2>
-                <p className="text-xs text-gray-400 mt-1">Kelola dan update status serta foto bukti pesanan customer</p>
+          <div className="bg-white rounded-[32px] p-6 sm:p-8 shadow-[0_10px_35px_rgba(233,45,121,0.06)] border border-pink-100/70 min-h-[calc(100vh-8rem)]">
+            {/* Header Row: Bag Icon + Title & "+ Tambah Pesanan" Button */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#E92D79] to-[#FF5A9E] shadow-md shadow-pink-300/40 flex items-center justify-center text-white flex-shrink-0">
+                  <ShoppingBag className="w-7 h-7" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Daftar Pesanan</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Kelola semua data pesanan pelanggan dengan mudah</p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex items-center gap-2.5 self-start sm:self-auto">
                 <button
                   onClick={fetchOrders}
                   title="Refresh Data"
-                  className="p-2.5 bg-gray-50 hover:bg-pink-50 text-gray-600 hover:text-pink-600 rounded-2xl border border-gray-200 transition"
+                  className="p-2.5 bg-gray-50 hover:bg-pink-50 text-gray-600 hover:text-[#E92D79] rounded-2xl border border-gray-200 transition"
                 >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-pink-600' : ''}`} />
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#E92D79]' : ''}`} />
                 </button>
-                <button
-                  onClick={openCreateModal}
-                  className="px-5 py-2.5 bg-[#DB2777] hover:bg-pink-700 text-white font-bold text-xs rounded-2xl shadow-md shadow-pink-200 transition flex items-center gap-1.5"
-                >
-                  <span>+</span> Tambah Pesanan
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={openCreateModal}
+                    className="px-6 py-2.5 bg-gradient-to-r from-[#E92D79] to-[#FF458F] hover:opacity-95 text-white font-bold text-xs rounded-full shadow-[0_4px_14px_rgba(233,45,121,0.35)] transition-all flex items-center gap-1.5 active:scale-95"
+                  >
+                    <span className="text-sm font-bold leading-none">+</span> Tambah Pesanan
+                  </button>
+                  <span className="absolute -top-1.5 -right-1 text-xs select-none">✨</span>
+                </div>
               </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="mt-6">
+            {/* Search Bar (Rounded Pill with Icon) */}
+            <div className="mt-2">
               <div className="relative">
                 <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
                   placeholder="Cari nomor order atau nama customer..."
-                  className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-pink-400 focus:border-transparent transition shadow-xs"
+                  className="w-full pl-11 pr-5 py-3 bg-white border border-gray-200/90 rounded-full text-xs font-medium text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] transition shadow-xs"
                 />
               </div>
             </div>
 
-            {/* Status Filter Pills */}
+            {/* Status Filter Pills with Live Counter Badges */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 mt-4 scrollbar-none">
-              {['Semua', 'Pesanan Diterima', 'Pesanan Diproses', 'Sedang Disiapkan', 'Siap Diambil', 'Pesanan Diantar', 'Pesanan Selesai'].map((tab) => {
-                const isActive = activeFilter === tab;
+              {[
+                { label: 'Semua', count: statusCounts.all },
+                { label: 'Pesanan Diterima', count: statusCounts.diterima },
+                { label: 'Pesanan Diproses', count: statusCounts.diproses },
+                { label: 'Sedang Disiapkan', count: statusCounts.disiapkan },
+                { label: 'Siap Diambil', count: statusCounts.siap },
+                { label: 'Pesanan Diantar', count: statusCounts.diantar },
+                { label: 'Pesanan Selesai', count: statusCounts.selesai },
+              ].map((tab) => {
+                const isActive = activeFilter === tab.label;
                 return (
                   <button
-                    key={tab}
-                    onClick={() => setActiveFilter(tab)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap ${
+                    key={tab.label}
+                    onClick={() => {
+                      setActiveFilter(tab.label);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center gap-2 ${
                       isActive
-                        ? 'bg-[#DB2777] text-white shadow-sm'
-                        : 'bg-gray-100 text-gray-600 hover:bg-pink-50 hover:text-pink-600'
+                        ? 'bg-[#E92D79] text-white shadow-xs'
+                        : 'bg-[#FFF0F5]/80 hover:bg-[#FFE4EE] text-gray-700'
                     }`}
                   >
-                    {tab}
+                    <span>{tab.label}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                        isActive
+                          ? 'bg-white/25 text-white'
+                          : 'bg-white text-[#E92D79] border border-pink-200'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Table Area */}
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-pink-100">
+            {/* Table Area (Pastel Pink Header & Clean Spacing) */}
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-pink-100/80">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#FFF5F7] border-b border-pink-100 text-gray-500 font-bold">
+                <thead className="bg-[#FFF2F6] border-b border-pink-100 text-gray-800 font-bold">
                   <tr>
                     <th className="py-3.5 px-4">No.</th>
                     <th className="py-3.5 px-4">Nomor Order Kopi Kenangan</th>
@@ -1012,11 +1124,11 @@ export default function AdminPage() {
                     <th className="py-3.5 px-4 text-center">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-pink-50">
+                <tbody className="divide-y divide-pink-50/80">
                   {loading ? (
                     <tr>
                       <td colSpan={7} className="text-center py-12 text-gray-400">
-                        <div className="w-8 h-8 border-3 border-pink-200 border-t-pink-500 rounded-full animate-spin mx-auto mb-2"></div>
+                        <div className="w-8 h-8 border-3 border-pink-200 border-t-[#E92D79] rounded-full animate-spin mx-auto mb-2"></div>
                         Memuat data pesanan...
                       </td>
                     </tr>
@@ -1028,46 +1140,46 @@ export default function AdminPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredOrders.map((order, idx) => {
+                    paginatedOrders.map((order, idx) => {
                       const displayNo = order.kopkenOrderNo
                         ? `#${order.kopkenOrderNo}`
                         : `#${order.orderCode.replace('KYUTI-', '')}`;
                       const photo = order.proofPhotoUrl;
 
                       return (
-                        <tr key={order.orderCode} className="hover:bg-pink-50/30 transition">
-                          <td className="py-4 px-4 font-semibold text-gray-400">{idx + 1}</td>
-                          <td className="py-4 px-4 font-black text-gray-900">{displayNo}</td>
-                          <td className="py-4 px-4 font-semibold text-gray-800">{order.customerName}</td>
-                          <td className="py-4 px-4">{renderStatusBadge(order.status)}</td>
-                          <td className="py-4 px-4">
+                        <tr key={order.orderCode} className="hover:bg-[#FFF9FB] transition">
+                          <td className="py-3.5 px-4 font-semibold text-gray-500">{startIndex + idx + 1}</td>
+                          <td className="py-3.5 px-4 font-bold text-gray-900">{displayNo}</td>
+                          <td className="py-3.5 px-4 font-medium text-gray-800">{order.customerName}</td>
+                          <td className="py-3.5 px-4">{renderStatusBadge(order.status)}</td>
+                          <td className="py-3.5 px-4">
                             {photo ? (
                               <a
                                 href={photo}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="block w-11 h-11 rounded-xl overflow-hidden border border-pink-200 hover:scale-105 transition shadow-xs"
+                                className="block w-12 h-10 rounded-lg overflow-hidden border border-pink-200 hover:scale-105 transition shadow-xs"
                               >
                                 <img src={photo} alt="Bukti" className="w-full h-full object-cover" />
                               </a>
                             ) : (
-                              <div className="w-11 h-11 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xs">
+                              <div className="w-12 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xs">
                                 -
                               </div>
                             )}
                           </td>
-                          <td className="py-4 px-4 text-gray-500 font-medium">
+                          <td className="py-3.5 px-4 text-gray-600 font-normal">
                             {formatUpdatedAt(order.updatedAt || order.createdAt)}
                           </td>
-                          <td className="py-4 px-4">
-                            <div className="flex items-center justify-center gap-2">
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center justify-center gap-1.5">
                               {/* View Tracking Link */}
                               <a
                                 href={`/track/${order.kopkenOrderNo || order.orderCode}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 title="Buka Link Tracking Customer"
-                                className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition"
+                                className="p-1.5 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
                               >
                                 <Eye className="w-4 h-4" />
                               </a>
@@ -1075,7 +1187,7 @@ export default function AdminPage() {
                               <button
                                 onClick={() => openEditModal(order)}
                                 title="Edit Status & Foto Bukti"
-                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition"
+                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                               >
                                 <Pencil className="w-4 h-4" />
                               </button>
@@ -1083,7 +1195,7 @@ export default function AdminPage() {
                               <button
                                 onClick={() => handleDeleteOrder(order.orderCode)}
                                 title="Hapus Pesanan"
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition"
+                                className="p-1.5 text-[#E92D79] hover:text-red-700 hover:bg-pink-50 rounded-lg transition"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1095,6 +1207,42 @@ export default function AdminPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+              <p className="text-xs text-gray-500 font-medium">
+                Menampilkan {filteredOrders.length > 0 ? startIndex + 1 : 0}–{Math.min(startIndex + pageSize, filteredOrders.length)} dari {filteredOrders.length} data
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  className="w-8 h-8 rounded-xl border border-gray-200 bg-white hover:bg-pink-50 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-white transition text-xs font-bold"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
+                  <button
+                    key={pNum}
+                    onClick={() => setCurrentPage(pNum)}
+                    className={`w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center transition ${
+                      pNum === safeCurrentPage
+                        ? 'bg-[#E92D79] text-white shadow-xs'
+                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-pink-50'
+                    }`}
+                  >
+                    {pNum}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  className="w-8 h-8 rounded-xl border border-gray-200 bg-white hover:bg-pink-50 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-white transition text-xs font-bold"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2079,10 +2227,10 @@ export default function AdminPage() {
       {/* ========================================================================= */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-pink-100 animate-scale-up">
+          <div className="bg-white rounded-[28px] p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-pink-100 animate-scale-up">
             <div className="flex items-center justify-between pb-4 border-b border-pink-50">
               <h3 className="text-lg font-black text-gray-900">
-                {modalMode === 'create' ? 'Tambah Pesanan Baru' : 'Edit Pesanan'}
+                {modalMode === 'create' ? 'Tambah Pesanan' : 'Edit Pesanan'}
               </h3>
               <button
                 onClick={() => setModalOpen(false)}
@@ -2104,8 +2252,8 @@ export default function AdminPage() {
                     required
                     value={formKopkenNo}
                     onChange={(e) => setFormKopkenNo(e.target.value)}
-                    placeholder="Contoh: 80537"
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-pink-400 transition"
+                    placeholder="80537"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] transition text-xs"
                   />
                 </div>
 
@@ -2119,8 +2267,8 @@ export default function AdminPage() {
                     required
                     value={formCustomerName}
                     onChange={(e) => setFormCustomerName(e.target.value)}
-                    placeholder="Contoh: Alya"
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 transition"
+                    placeholder="Alya"
+                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] transition text-xs font-medium"
                   />
                 </div>
               </div>
@@ -2133,7 +2281,7 @@ export default function AdminPage() {
                 <select
                   value={formStatus}
                   onChange={(e) => setFormStatus(e.target.value as OrderStatus)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400 font-semibold transition text-xs"
+                  className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] font-semibold transition text-xs"
                 >
                   <option value="diterima">Pesanan Diterima</option>
                   <option value="diproses">Pesanan Diproses</option>
@@ -2147,7 +2295,7 @@ export default function AdminPage() {
               {/* Foto Bukti Pesanan */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5">
-                  Foto Bukti Pesanan <span className="text-gray-400 font-normal">(Kasir / Cup)</span>
+                  Foto Bukti Pesanan <span className="text-red-500">*</span>
                 </label>
 
                 <div className="flex items-center gap-3">
@@ -2169,7 +2317,7 @@ export default function AdminPage() {
                   {/* Upload Box */}
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 border-2 border-dashed border-pink-200 hover:border-pink-400 bg-pink-50/30 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition text-center min-h-[96px]"
+                    className="flex-1 border-2 border-dashed border-pink-200 hover:border-[#E92D79] bg-[#FFF0F5]/50 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition text-center min-h-[96px]"
                   >
                     <input
                       type="file"
@@ -2179,15 +2327,15 @@ export default function AdminPage() {
                       className="hidden"
                     />
                     {uploadingPhoto ? (
-                      <div className="flex items-center gap-2 text-pink-600 text-xs font-semibold">
-                        <div className="w-4 h-4 border-2 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+                      <div className="flex items-center gap-2 text-[#E92D79] text-xs font-semibold">
+                        <div className="w-4 h-4 border-2 border-[#E92D79] border-t-transparent rounded-full animate-spin"></div>
                         Mengupload ke Vercel Blob...
                       </div>
                     ) : (
                       <>
-                        <ImageIcon className="w-5 h-5 text-pink-400 mb-1" />
-                        <span className="text-xs font-bold text-pink-600">
-                          {formPhotoUrl ? 'Ganti Foto' : '+ Pilih Foto'}
+                        <ImageIcon className="w-5 h-5 text-[#E92D79] mb-1" />
+                        <span className="text-xs font-bold text-[#E92D79]">
+                          {formPhotoUrl ? 'Ganti Foto' : 'Pilih Foto'}
                         </span>
                         <span className="text-[10px] text-gray-400">JPG, PNG atau WebP</span>
                       </>
@@ -2208,7 +2356,7 @@ export default function AdminPage() {
                 <button
                   type="submit"
                   disabled={savingOrder || uploadingPhoto}
-                  className="px-8 py-2.5 bg-[#DB2777] hover:bg-pink-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-pink-200 transition"
+                  className="px-8 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md shadow-pink-200 transition"
                 >
                   {savingOrder ? 'Menyimpan...' : 'Simpan'}
                 </button>

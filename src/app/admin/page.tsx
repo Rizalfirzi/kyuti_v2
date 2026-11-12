@@ -801,10 +801,30 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#FFF0F5] overflow-x-hidden flex flex-col md:flex-row font-sans text-gray-800">
-      {/* Background Soft Pink Glow / Waves */}
-      <div className="w-[450px] h-[350px] bg-[#FFE0EC] rounded-full blur-3xl opacity-50 absolute -top-20 -right-20 pointer-events-none" />
-      <div className="w-[450px] h-[350px] bg-[#FFE0EC] rounded-full blur-3xl opacity-40 absolute -bottom-20 -left-20 pointer-events-none" />
+    <div className="relative min-h-screen bg-[#FFF0F5] overflow-x-hidden flex flex-col md:flex-row font-kyuti text-gray-800 p-4 md:p-6 lg:p-8">
+      {/* Top-Right Decorative Smooth Wave (Matches Reference Image) */}
+      <svg
+        className="absolute top-0 right-0 w-[550px] h-[350px] pointer-events-none select-none text-[#FFDEEB]/60 z-0"
+        viewBox="0 0 550 350"
+        fill="none"
+      >
+        <path
+          d="M150 0C250 120 400 80 550 160V0H150Z"
+          fill="currentColor"
+        />
+      </svg>
+
+      {/* Bottom-Left Decorative Smooth Wave (Matches Reference Image) */}
+      <svg
+        className="absolute bottom-0 left-0 w-[500px] h-[350px] pointer-events-none select-none text-[#FFDEEB]/60 z-0"
+        viewBox="0 0 500 350"
+        fill="none"
+      >
+        <path
+          d="M0 200C120 180 220 300 380 260C440 245 470 280 500 350H0V200Z"
+          fill="currentColor"
+        />
+      </svg>
 
       {/* Toast Notification */}
       {notification && (
@@ -815,7 +835,7 @@ export default function AdminPage() {
       )}
 
       {/* Mobile Topbar */}
-      <div className="md:hidden flex items-center justify-between bg-white px-4 py-3 border-b border-pink-100 sticky top-0 z-40">
+      <div className="md:hidden flex items-center justify-between bg-white px-4 py-3 rounded-2xl mb-4 border border-pink-100 shadow-sm sticky top-0 z-40">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
@@ -838,20 +858,20 @@ export default function AdminPage() {
 
       {/* Left Sidebar (Modern, Clean, Presisi & Aestetik) */}
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-transparent flex flex-col justify-between p-6 z-50 transition-transform duration-200 ${
+        className={`fixed md:relative top-0 left-0 h-screen md:h-auto w-64 flex flex-col justify-between py-4 px-4 md:px-5 z-50 transition-transform duration-200 ${
           mobileSidebarOpen ? 'translate-x-0 bg-[#FFF0F5] shadow-2xl' : '-translate-x-full md:translate-x-0'
         }`}
       >
         <div>
           {/* Logo / Brand Header */}
-          <div className="flex items-center justify-between pb-8">
+          <div className="flex items-center justify-between pb-8 pt-2">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white shadow-sm border border-pink-100 flex items-center justify-center text-pink-600 font-bold text-lg">
+              <div className="w-11 h-11 rounded-2xl bg-[#FFE5EE] flex items-center justify-center text-xl shadow-xs">
                 ☕
               </div>
               <div>
-                <h1 className="font-black text-gray-900 text-base tracking-tight flex items-center gap-1.5">
-                  Kedai Kyuti <span className="text-[#E92D79] text-sm">♡</span>
+                <h1 className="font-black text-gray-900 text-lg tracking-tight flex items-center gap-1.5">
+                  Kedai Kyuti <span className="text-[#E92D79] text-base">♡</span>
                 </h1>
               </div>
             </div>
@@ -876,13 +896,13 @@ export default function AdminPage() {
               className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'dashboard'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'dashboard' && (
-                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+                <span className="absolute left-0 top-3 bottom-3 w-1.5 bg-[#E92D79] rounded-r-full" />
               )}
-              <LayoutDashboard className={`w-4 h-4 ${activeMenu === 'dashboard' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
+              <LayoutDashboard className={`w-4 h-4 ${activeMenu === 'dashboard' ? 'text-[#E92D79]' : 'text-gray-600'}`} />
               <span>Dashboard</span>
             </button>
 
@@ -892,26 +912,17 @@ export default function AdminPage() {
                 setActiveMenu('orders');
                 setMobileSidebarOpen(false);
               }}
-              className={`relative w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'orders'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'orders' && (
-                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+                <span className="absolute left-0 top-3 bottom-3 w-1.5 bg-[#E92D79] rounded-r-full" />
               )}
-              <div className="flex items-center gap-3.5">
-                <Package className={`w-4 h-4 ${activeMenu === 'orders' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
-                <span>Pesanan</span>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                activeMenu === 'orders'
-                  ? 'bg-white text-[#E92D79] shadow-xs'
-                  : 'bg-white/80 text-gray-500'
-              }`}>
-                {orders.length}
-              </span>
+              <Package className={`w-4 h-4 ${activeMenu === 'orders' ? 'text-[#E92D79]' : 'text-gray-600'}`} />
+              <span>Pesanan</span>
             </button>
 
             {/* 3. Tambah Pesanan (Quick Action) */}
@@ -920,9 +931,9 @@ export default function AdminPage() {
                 openCreateModal();
                 setMobileSidebarOpen(false);
               }}
-              className="relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-white/60 transition text-left"
+              className="relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-white/50 transition text-left"
             >
-              <PlusCircle className="w-4 h-4 text-gray-500" />
+              <PlusCircle className="w-4 h-4 text-gray-600" />
               <span>Tambah Pesanan</span>
             </button>
 
@@ -935,13 +946,13 @@ export default function AdminPage() {
               className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'reports'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'reports' && (
-                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+                <span className="absolute left-0 top-3 bottom-3 w-1.5 bg-[#E92D79] rounded-r-full" />
               )}
-              <FileBarChart className={`w-4 h-4 ${activeMenu === 'reports' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
+              <FileBarChart className={`w-4 h-4 ${activeMenu === 'reports' ? 'text-[#E92D79]' : 'text-gray-600'}`} />
               <span>Laporan</span>
             </button>
 
@@ -954,65 +965,56 @@ export default function AdminPage() {
               className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
                 activeMenu === 'settings'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/60'
+                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'settings' && (
-                <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-[#E92D79] rounded-r-full" />
+                <span className="absolute left-0 top-3 bottom-3 w-1.5 bg-[#E92D79] rounded-r-full" />
               )}
-              <Settings className={`w-4 h-4 ${activeMenu === 'settings' ? 'text-[#E92D79]' : 'text-gray-500'}`} />
-              <span>Pengaturan &amp; Fee</span>
+              <Settings className={`w-4 h-4 ${activeMenu === 'settings' ? 'text-[#E92D79]' : 'text-gray-600'}`} />
+              <span>Pengaturan</span>
             </button>
           </nav>
         </div>
 
         {/* Bottom Section with Floating Heart and Logout */}
-        <div className="pt-6 relative">
+        <div className="pt-6 relative pb-2">
           {/* Subtle floating heart decoration */}
-          <div className="absolute right-2 bottom-12 pointer-events-none opacity-40">
+          <div className="absolute right-3 bottom-8 pointer-events-none opacity-40">
             <Heart className="w-5 h-5 text-[#E92D79] stroke-[1.5]" />
           </div>
 
-          <div className="space-y-1.5">
-            <a
-              href="/"
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl text-xs font-semibold text-gray-500 hover:text-[#E92D79] hover:bg-white/50 transition"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>Lihat Website Toko</span>
-            </a>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-2xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-white/50 transition"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Keluar</span>
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-white/50 transition text-left"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Keluar</span>
+          </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-8 max-w-6xl w-full z-10">
+      <main className="flex-1 max-w-6xl w-full z-10 md:pl-2">
         {/* Top Header Bar outside Card (Bell Badge + Admin Avatar Dropdown) */}
-        <div className="flex items-center justify-end gap-4 mb-4">
+        <div className="flex items-center justify-end gap-5 mb-5 pr-2">
           {/* Notification Bell with Badge */}
-          <div className="relative p-2 rounded-full hover:bg-white/80 transition cursor-pointer text-gray-700">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-4 h-4 bg-[#E92D79] text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-xs">
+          <div className="relative p-2 rounded-full hover:bg-white/60 transition cursor-pointer text-gray-700">
+            <Bell className="w-5 h-5 stroke-[1.8]" />
+            <span className="absolute top-1 right-1 w-4 h-4 bg-[#E92D79] text-white text-[10px] font-black rounded-full flex items-center justify-center">
               3
             </span>
           </div>
 
           {/* Admin Profile */}
-          <div className="flex items-center gap-2.5 cursor-pointer pl-1.5 pr-3 py-1 bg-white/80 hover:bg-white rounded-full transition shadow-xs border border-pink-100">
+          <div className="flex items-center gap-2.5 cursor-pointer pl-1.5 pr-3 py-1 bg-white/70 hover:bg-white rounded-full transition shadow-xs border border-pink-100/60">
             <img
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=face"
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=face"
               alt="Admin"
               className="w-8 h-8 rounded-full object-cover ring-2 ring-pink-200"
             />
             <span className="text-xs font-bold text-gray-800">Admin</span>
-            <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+            <ChevronDown className="w-3.5 h-3.5 text-gray-600 stroke-[2]" />
           </div>
         </div>
 
@@ -1020,35 +1022,47 @@ export default function AdminPage() {
         {/* VIEW 1: DAFTAR PESANAN (Matches Reference Image UI/UX)                   */}
         {/* ========================================================================= */}
         {activeMenu === 'orders' && (
-          <div className="bg-white rounded-[32px] p-6 sm:p-8 shadow-[0_10px_35px_rgba(233,45,121,0.06)] border border-pink-100/70 min-h-[calc(100vh-8rem)]">
+          <div className="bg-white rounded-[32px] p-6 sm:p-8 md:p-10 shadow-[0_12px_45px_rgba(233,45,121,0.06)] border border-white/80 min-h-[calc(100vh-9rem)]">
             {/* Header Row: Bag Icon + Title & "+ Tambah Pesanan" Button */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#E92D79] to-[#FF5A9E] shadow-md shadow-pink-300/40 flex items-center justify-center text-white flex-shrink-0">
-                  <ShoppingBag className="w-7 h-7" />
+                <div className="w-14 h-14 rounded-2xl bg-[#E92D79] shadow-md shadow-pink-300/40 flex items-center justify-center text-white flex-shrink-0">
+                  <ShoppingBag className="w-7 h-7 stroke-[1.8]" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-black text-gray-900 tracking-tight">Daftar Pesanan</h2>
-                  <p className="text-xs text-gray-500 mt-0.5">Kelola semua data pesanan pelanggan dengan mudah</p>
+                  <h2 className="text-2xl md:text-[26px] font-black text-gray-900 tracking-tight">Daftar Pesanan</h2>
+                  <p className="text-xs text-gray-400 font-medium mt-1">Kelola semua data pesanan pelanggan dengan mudah</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 self-start sm:self-auto">
+              <div className="flex items-center gap-3 self-start sm:self-auto">
                 <button
                   onClick={fetchOrders}
                   title="Refresh Data"
-                  className="p-2.5 bg-gray-50 hover:bg-pink-50 text-gray-600 hover:text-[#E92D79] rounded-2xl border border-gray-200 transition"
+                  className="p-2.5 bg-gray-50 hover:bg-pink-50 text-gray-600 hover:text-[#E92D79] rounded-2xl border border-gray-200/80 transition"
                 >
                   <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#E92D79]' : ''}`} />
                 </button>
                 <div className="relative">
                   <button
                     onClick={openCreateModal}
-                    className="px-6 py-2.5 bg-gradient-to-r from-[#E92D79] to-[#FF458F] hover:opacity-95 text-white font-bold text-xs rounded-full shadow-[0_4px_14px_rgba(233,45,121,0.35)] transition-all flex items-center gap-1.5 active:scale-95"
+                    className="px-6 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] text-white font-bold text-xs rounded-full shadow-[0_6px_20px_rgba(233,45,121,0.35)] transition flex items-center gap-1.5 active:scale-95"
                   >
-                    <span className="text-sm font-bold leading-none">+</span> Tambah Pesanan
+                    <span className="text-base font-bold leading-none">+</span> Tambah Pesanan
                   </button>
-                  <span className="absolute -top-1.5 -right-1 text-xs select-none">✨</span>
+                  {/* 3 radiant sparkle lines (Matches Reference Image) */}
+                  <svg
+                    className="absolute -top-2.5 -right-2.5 w-6 h-6 text-[#E92D79] pointer-events-none select-none"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  >
+                    <line x1="12" y1="4" x2="10" y2="8" />
+                    <line x1="17" y1="7" x2="13" y2="10" />
+                    <line x1="20" y1="12" x2="15" y2="12" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -1056,7 +1070,7 @@ export default function AdminPage() {
             {/* Search Bar (Rounded Pill with Icon) */}
             <div className="mt-2">
               <div className="relative">
-                <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-gray-400 absolute left-4.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
@@ -1065,13 +1079,13 @@ export default function AdminPage() {
                     setCurrentPage(1);
                   }}
                   placeholder="Cari nomor order atau nama customer..."
-                  className="w-full pl-11 pr-5 py-3 bg-white border border-gray-200/90 rounded-full text-xs font-medium text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] transition shadow-xs"
+                  className="w-full pl-12 pr-6 py-3 bg-white border border-gray-200/90 rounded-full text-xs font-medium text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] transition shadow-xs"
                 />
               </div>
             </div>
 
-            {/* Status Filter Pills with Live Counter Badges */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 mt-4 scrollbar-none">
+            {/* Status Filter Pills with Live Counter Badges (Matching Reference Style) */}
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-2 mt-5 scrollbar-none">
               {[
                 { label: 'Semua', count: statusCounts.all },
                 { label: 'Pesanan Diterima', count: statusCounts.diterima },
@@ -1089,18 +1103,18 @@ export default function AdminPage() {
                       setActiveFilter(tab.label);
                       setCurrentPage(1);
                     }}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center gap-2 ${
+                    className={`px-5 py-2 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center ${
                       isActive
                         ? 'bg-[#E92D79] text-white shadow-xs'
-                        : 'bg-[#FFF0F5]/80 hover:bg-[#FFE4EE] text-gray-700'
+                        : 'bg-[#FFF0F5] hover:bg-[#FFE4EE] text-gray-700'
                     }`}
                   >
                     <span>{tab.label}</span>
                     <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                      className={`ml-2 text-[10px] font-black ${
                         isActive
-                          ? 'bg-white/25 text-white'
-                          : 'bg-white text-[#E92D79] border border-pink-200'
+                          ? 'bg-white text-[#E92D79] px-2 py-0.5 rounded-full'
+                          : 'text-[#E92D79]'
                       }`}
                     >
                       {tab.count}
@@ -1111,30 +1125,30 @@ export default function AdminPage() {
             </div>
 
             {/* Table Area (Pastel Pink Header & Clean Spacing) */}
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-pink-100/80">
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-pink-100/70">
               <table className="w-full text-left text-xs">
-                <thead className="bg-[#FFF2F6] border-b border-pink-100 text-gray-800 font-bold">
+                <thead className="bg-[#FFF0F5] border-b border-pink-100 text-gray-900 font-bold">
                   <tr>
-                    <th className="py-3.5 px-4">No.</th>
-                    <th className="py-3.5 px-4">Nomor Order Kopi Kenangan</th>
-                    <th className="py-3.5 px-4">Nama Customer</th>
-                    <th className="py-3.5 px-4">Status Pesanan</th>
-                    <th className="py-3.5 px-4">Foto Bukti</th>
-                    <th className="py-3.5 px-4">Waktu Update</th>
-                    <th className="py-3.5 px-4 text-center">Aksi</th>
+                    <th className="py-4 px-5">No.</th>
+                    <th className="py-4 px-5">Nomor Order Kopi Kenangan</th>
+                    <th className="py-4 px-5">Nama Customer</th>
+                    <th className="py-4 px-5">Status Pesanan</th>
+                    <th className="py-4 px-5">Foto Bukti</th>
+                    <th className="py-4 px-5">Waktu Update</th>
+                    <th className="py-4 px-5 text-center">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-pink-50/80">
+                <tbody className="divide-y divide-gray-100">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-gray-400">
+                      <td colSpan={7} className="text-center py-14 text-gray-400">
                         <div className="w-8 h-8 border-3 border-pink-200 border-t-[#E92D79] rounded-full animate-spin mx-auto mb-2"></div>
                         Memuat data pesanan...
                       </td>
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-12 text-gray-400">
+                      <td colSpan={7} className="text-center py-14 text-gray-400">
                         <div className="text-3xl mb-2">🔍</div>
                         Tidak ada pesanan ditemukan.
                       </td>
@@ -1148,56 +1162,56 @@ export default function AdminPage() {
 
                       return (
                         <tr key={order.orderCode} className="hover:bg-[#FFF9FB] transition">
-                          <td className="py-3.5 px-4 font-semibold text-gray-500">{startIndex + idx + 1}</td>
-                          <td className="py-3.5 px-4 font-bold text-gray-900">{displayNo}</td>
-                          <td className="py-3.5 px-4 font-medium text-gray-800">{order.customerName}</td>
-                          <td className="py-3.5 px-4">{renderStatusBadge(order.status)}</td>
-                          <td className="py-3.5 px-4">
+                          <td className="py-4 px-5 font-bold text-gray-700">{startIndex + idx + 1}</td>
+                          <td className="py-4 px-5 font-black text-gray-900 tracking-wide text-xs">{displayNo}</td>
+                          <td className="py-4 px-5 font-bold text-gray-800 text-xs">{order.customerName}</td>
+                          <td className="py-4 px-5">{renderStatusBadge(order.status)}</td>
+                          <td className="py-4 px-5">
                             {photo ? (
                               <a
                                 href={photo}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="block w-12 h-10 rounded-lg overflow-hidden border border-pink-200 hover:scale-105 transition shadow-xs"
+                                className="block w-14 h-11 rounded-xl overflow-hidden border border-gray-200 hover:scale-105 transition shadow-xs"
                               >
                                 <img src={photo} alt="Bukti" className="w-full h-full object-cover" />
                               </a>
                             ) : (
-                              <div className="w-12 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xs">
+                              <div className="w-14 h-11 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xs font-bold">
                                 -
                               </div>
                             )}
                           </td>
-                          <td className="py-3.5 px-4 text-gray-600 font-normal">
+                          <td className="py-4 px-5 text-gray-700 font-medium">
                             {formatUpdatedAt(order.updatedAt || order.createdAt)}
                           </td>
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center justify-center gap-1.5">
+                          <td className="py-4 px-5">
+                            <div className="flex items-center justify-center gap-3.5">
                               {/* View Tracking Link */}
                               <a
                                 href={`/track/${order.kopkenOrderNo || order.orderCode}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 title="Buka Link Tracking Customer"
-                                className="p-1.5 text-gray-400 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
+                                className="text-gray-700 hover:text-black transition"
                               >
-                                <Eye className="w-4 h-4" />
+                                <Eye className="w-4 h-4 stroke-[1.8]" />
                               </a>
                               {/* Edit Modal Button */}
                               <button
                                 onClick={() => openEditModal(order)}
                                 title="Edit Status & Foto Bukti"
-                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                className="text-gray-700 hover:text-blue-600 transition"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="w-4 h-4 stroke-[1.8]" />
                               </button>
                               {/* Delete Order Button */}
                               <button
                                 onClick={() => handleDeleteOrder(order.orderCode)}
                                 title="Hapus Pesanan"
-                                className="p-1.5 text-[#E92D79] hover:text-red-700 hover:bg-pink-50 rounded-lg transition"
+                                className="text-[#E92D79] hover:text-red-700 transition"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4 stroke-[1.8]" />
                               </button>
                             </div>
                           </td>
@@ -1214,11 +1228,11 @@ export default function AdminPage() {
               <p className="text-xs text-gray-500 font-medium">
                 Menampilkan {filteredOrders.length > 0 ? startIndex + 1 : 0}–{Math.min(startIndex + pageSize, filteredOrders.length)} dari {filteredOrders.length} data
               </p>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={safeCurrentPage <= 1}
-                  className="w-8 h-8 rounded-xl border border-gray-200 bg-white hover:bg-pink-50 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-white transition text-xs font-bold"
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -1229,7 +1243,7 @@ export default function AdminPage() {
                     className={`w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center transition ${
                       pNum === safeCurrentPage
                         ? 'bg-[#E92D79] text-white shadow-xs'
-                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-pink-50'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     {pNum}
@@ -1238,7 +1252,7 @@ export default function AdminPage() {
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safeCurrentPage >= totalPages}
-                  className="w-8 h-8 rounded-xl border border-gray-200 bg-white hover:bg-pink-50 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-white transition text-xs font-bold"
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>

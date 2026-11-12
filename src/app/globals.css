@@ -2,24 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Universal Button Reset to eliminate default browser borders */
-button,
-[type='button'],
-[type='reset'],
-[type='submit'] {
-  background: none;
-  border: 0 !important;
-  outline: none;
-  box-shadow: none;
-  font: inherit;
-  color: inherit;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
 /* CSS Variables for Kedai Kyuti Vanilla Engine */
 :root {
   --brand-primary: #F472B6;

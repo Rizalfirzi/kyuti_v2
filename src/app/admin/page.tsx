@@ -288,6 +288,18 @@ export default function AdminPage() {
             Sedang Disiapkan
           </span>
         );
+      case 'diantar':
+        return (
+          <span className="inline-block px-3 py-1 bg-[#E0F2FE] text-[#0284C7] text-xs font-bold rounded-full border border-[#BAE6FD]">
+            🛵 Pesanan Diantar
+          </span>
+        );
+      case 'selesai':
+        return (
+          <span className="inline-block px-3 py-1 bg-[#DCFCE7] text-[#15803D] text-xs font-bold rounded-full border border-[#BBF7D0]">
+            🎉 Pesanan Diterima
+          </span>
+        );
       case 'diterima':
       default:
         return (
@@ -312,6 +324,8 @@ export default function AdminPage() {
     if (activeFilter === 'Pesanan Diproses') return order.status === 'diproses';
     if (activeFilter === 'Sedang Disiapkan') return order.status === 'disiapkan';
     if (activeFilter === 'Siap Diambil') return order.status === 'siap';
+    if (activeFilter === 'Pesanan Diantar') return order.status === 'diantar';
+    if (activeFilter === 'Pesanan Selesai' || activeFilter === 'Pesanan Diterima (Selesai)') return order.status === 'selesai';
     return true;
   });
 
@@ -563,9 +577,9 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Status Filter Pills (Matches Image 2) */}
+          {/* Status Filter Pills (Matches Image 2 + Diantar & Diterima) */}
           <div className="flex items-center gap-2 overflow-x-auto pb-2 mt-4 scrollbar-none">
-            {['Semua', 'Pesanan Diterima', 'Pesanan Diproses', 'Sedang Disiapkan', 'Siap Diambil'].map((tab) => {
+            {['Semua', 'Pesanan Diterima', 'Pesanan Diproses', 'Sedang Disiapkan', 'Siap Diambil', 'Pesanan Diantar', 'Pesanan Selesai'].map((tab) => {
               const isActive = activeFilter === tab;
               return (
                 <button
@@ -746,7 +760,8 @@ export default function AdminPage() {
                   <option value="diproses">Pesanan Diproses</option>
                   <option value="disiapkan">Sedang Disiapkan</option>
                   <option value="siap">Siap Diambil</option>
-                  <option value="selesai">Selesai</option>
+                  <option value="diantar">Pesanan Diantar</option>
+                  <option value="selesai">Pesanan Diterima (Selesai)</option>
                 </select>
               </div>
 

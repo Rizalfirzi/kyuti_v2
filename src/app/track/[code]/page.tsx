@@ -17,6 +17,8 @@ import {
   MessageCircle,
   X,
   Maximize2,
+  Bike,
+  CheckCheck,
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/lib/types';
 
@@ -113,12 +115,13 @@ export default function TrackingPage() {
     diproses: 2,
     disiapkan: 3,
     siap: 4,
-    selesai: 5,
+    diantar: 5,
+    selesai: 6,
   };
 
   const currentRank = statusRanks[order.status] || 1;
 
-  // Pre-defined timeline step definition
+  // Pre-defined timeline step definition (Matches Image 2 + Diantar & Diterima)
   const timelineSteps = [
     {
       key: 'diterima',
@@ -150,6 +153,26 @@ export default function TrackingPage() {
           ? 'Pesanan kamu sudah selesai dan siap untuk diambil.'
           : 'Pesanan kamu akan segera siap untuk diambil.',
       icon: ShoppingBag,
+    },
+    {
+      key: 'diantar',
+      rank: 5,
+      title: 'Pesanan Diantar',
+      desc:
+        currentRank >= 5
+          ? 'Pesanan kamu sedang dalam perjalanan diantar oleh kurir ke alamatmu.'
+          : 'Pesanan kamu akan segera diantar oleh kurir.',
+      icon: Bike,
+    },
+    {
+      key: 'selesai',
+      rank: 6,
+      title: 'Pesanan Diterima',
+      desc:
+        currentRank >= 6
+          ? 'Pesanan sudah sampai dan diterima. Selamat menikmati! ♡'
+          : 'Pesanan telah selesai dan diterima olehmu.',
+      icon: CheckCheck,
     },
   ];
 
@@ -213,8 +236,32 @@ export default function TrackingPage() {
           </div>
         </div>
 
-        {/* Big Status Banner (Matches Image 1 & 2) */}
-        {order.status === 'siap' || order.status === 'selesai' ? (
+        {/* Big Status Banner (Matches Image 1 & 2 + Diantar & Diterima) */}
+        {order.status === 'selesai' ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-4 flex items-center gap-4 shadow-sm animate-cute-pulse">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
+              <CheckCheck className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-emerald-700">Pesanan Diterima</h2>
+              <p className="text-xs text-emerald-600 mt-0.5 leading-snug">
+                Pesanan kamu sudah sampai dan diterima. Selamat menikmati! ♡
+              </p>
+            </div>
+          </div>
+        ) : order.status === 'diantar' ? (
+          <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 flex items-center gap-4 shadow-sm animate-cute-pulse">
+            <div className="w-12 h-12 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600 flex-shrink-0">
+              <Bike className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-sky-700">Pesanan Diantar</h2>
+              <p className="text-xs text-sky-600 mt-0.5 leading-snug">
+                Kurir sedang mengantarkan pesanan kamu ke alamat tujuan.
+              </p>
+            </div>
+          </div>
+        ) : order.status === 'siap' ? (
           <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-4 flex items-center gap-4 shadow-sm animate-cute-pulse">
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 flex-shrink-0">
               <ShoppingBag className="w-6 h-6 stroke-[2.5]" />

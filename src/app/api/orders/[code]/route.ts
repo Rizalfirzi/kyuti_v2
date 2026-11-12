@@ -25,9 +25,13 @@ const STATUS_TEXT_MAP: Record<OrderStatus, { title: string; desc: string }> = {
     title: 'Siap Diambil',
     desc: 'Pesanan kamu sudah selesai dan siap untuk diambil.',
   },
+  diantar: {
+    title: 'Pesanan Diantar',
+    desc: 'Pesanan kamu sedang dalam perjalanan diantar oleh kurir ke alamatmu.',
+  },
   selesai: {
-    title: 'Pesanan Selesai',
-    desc: 'Terima kasih telah memesan di Kedai Kyuti ♡',
+    title: 'Pesanan Diterima',
+    desc: 'Pesanan sudah sampai dan diterima. Selamat menikmati! ♡',
   },
 };
 

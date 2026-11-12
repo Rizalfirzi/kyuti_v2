@@ -2632,13 +2632,34 @@ function renderTrackingResult(ord) {
         'diproses': 2,
         'disiapkan': 3,
         'siap': 4,
-        'selesai': 5
+        'diantar': 5,
+        'selesai': 6
     };
     const currentRank = statusRanks[status] || 1;
 
-    // Status Banner definitions matching Gambar 2
+    // Status Banner definitions matching Gambar 2 + Diantar & Diterima
     let bannerHtml = '';
-    if (status === 'siap' || status === 'selesai') {
+    if (status === 'selesai') {
+        bannerHtml = `
+            <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(16,185,129,0.06)">
+                <div style="width:48px;height:48px;border-radius:16px;background:#D1FAE5;color:#059669;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🎉</div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#047857">Pesanan Diterima</div>
+                    <div style="font-size:12px;color:#059669;margin-top:2px;line-height:1.35">Pesanan sudah sampai dan diterima. Selamat menikmati! ♡</div>
+                </div>
+            </div>
+        `;
+    } else if (status === 'diantar') {
+        bannerHtml = `
+            <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(14,165,233,0.06)">
+                <div style="width:48px;height:48px;border-radius:16px;background:#E0F2FE;color:#0284C7;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🛵</div>
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#0369A1">Pesanan Diantar</div>
+                    <div style="font-size:12px;color:#0284C7;margin-top:2px;line-height:1.35">Pesanan kamu sedang dalam perjalanan diantar kurir ke alamatmu.</div>
+                </div>
+            </div>
+        `;
+    } else if (status === 'siap') {
         bannerHtml = `
             <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:22px;padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:14px;box-shadow:0 2px 6px rgba(16,185,129,0.06)">
                 <div style="width:48px;height:48px;border-radius:16px;background:#D1FAE5;color:#059669;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🛍️</div>
@@ -2680,12 +2701,14 @@ function renderTrackingResult(ord) {
         `;
     }
 
-    // Timeline Steps matching Gambar 2
+    // Timeline Steps matching Gambar 2 + Diantar & Diterima
     const steps = [
         { rank: 1, key: 'diterima', title: 'Pesanan Diterima', desc: 'Pesanan kamu sudah kami terima.', icon: '✓' },
         { rank: 2, key: 'diproses', title: 'Pesanan Diproses', desc: 'Pesanan sedang diproses oleh outlet.', icon: '☕' },
         { rank: 3, key: 'disiapkan', title: 'Sedang Disiapkan', desc: 'Barista sedang menyiapkan pesanan kamu.', icon: '✨' },
         { rank: 4, key: 'siap', title: 'Siap Diambil', desc: currentRank >= 4 ? 'Pesanan kamu sudah selesai dan siap untuk diambil.' : 'Pesanan kamu akan segera siap untuk diambil.', icon: '🛍️' },
+        { rank: 5, key: 'diantar', title: 'Pesanan Diantar', desc: currentRank >= 5 ? 'Pesanan kamu sedang dalam perjalanan diantar kurir ke lokasimu.' : 'Pesanan kamu akan segera diantar oleh kurir.', icon: '🛵' },
+        { rank: 6, key: 'selesai', title: 'Pesanan Diterima', desc: currentRank >= 6 ? 'Pesanan sudah sampai dan diterima. Selamat menikmati! ♡' : 'Pesanan telah selesai dan diterima olehmu.', icon: '🎉' },
     ];
 
     let stepsHtml = '';
@@ -2708,10 +2731,14 @@ function renderTrackingResult(ord) {
             titleColor = '#1F2937';
             descColor = '#6B7280';
         } else if (isCurrent) {
-            if (status === 'siap') {
+            if (status === 'selesai' || status === 'siap') {
                 dotBg = '#10B981';
                 dotColor = '#FFFFFF';
                 titleColor = '#047857';
+            } else if (status === 'diantar') {
+                dotBg = '#0284C7';
+                dotColor = '#FFFFFF';
+                titleColor = '#0369A1';
             } else {
                 dotBg = '#EC4899';
                 dotColor = '#FFFFFF';

@@ -1,4 +1,4 @@
-export type OrderStatus = 'diterima' | 'diproses' | 'disiapkan' | 'siap' | 'selesai';
+export type OrderStatus = 'diterima' | 'diproses' | 'disiapkan' | 'siap' | 'diantar' | 'selesai';
 
 export interface StatusHistoryItem {
   status: OrderStatus;

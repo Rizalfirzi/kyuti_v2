@@ -1,0 +1,4809 @@
+/**
+ * Kedai Kyuti - Native JavaScript Application Engine
+ * Domain: kedaikyuti.my.id
+ * Handles State, API Integration, Modals, Bundling, Cart, Pickup Time & WhatsApp Checkout.
+ */
+
+// Initialize Application State
+const AppState = {
+    view: 'hub', // 'hub' or 'store'
+    outlet: window.INITIAL_DATA?.outlet || null,
+    outlets: window.INITIAL_DATA?.outlets || [],
+    menu: window.INITIAL_DATA?.menu || { items: [], stats: {} },
+    bundlingItems: window.INITIAL_DATA?.bundlingItems || [],
+    cart: JSON.parse(localStorage.getItem('kyuti_cart') || '[]'),
+    activeCategory: 'all',
+    searchQuery: '',
+    selectedProduct: null,
+    selectedSize: 'Regular',
+    selectedTemp: 'Ice',
+    selectedIce: 'Normal Ice',
+    selectedSugar: 'Normal Sugar',
+    selectedQty: 1,
+
+    // Fee & Addon Settings
+    singleItemFeeAmount: window.INITIAL_DATA?.singleItemFee ?? 0,
+    plasticBagFeeAmount: window.INITIAL_DATA?.plasticBagFee || 1000,
+    hasPlasticBag: false,
+    plasticBagQty: 1,
+    pickupType: 'Sekarang', // 'Sekarang' or 'Atur Jam'
+    pickupTimezone: 'WIB',
+    pickupTime: '',
+
+    // Active Bundling Customization
+    activeBundle: null,
+    bundleSlotChoices: {},
+    bundleSlotPrefs: {},
+    bundleIce: 'Normal Ice',
+    bundleSugar: 'Normal Sugar',
+
+    // Product Customization Sheet State (Addons & Options)
+    sheet: {
+        item: null,
+        groups: [],
+        prices: null,
+        normals: null,
+        sel: {},
+        qty: 1,
+        loading: false,
+        addons: [],
+        comboAddons: null,
+        picked: new Set(),
+    },
+
+    // Pending Single Item for 1pcs Fee Modal
+    pendingCartItem: null,
+
+    // Jam Operasional Web Kedai Kyuti (Fitur Baru)
+    webHours: window.INITIAL_DATA?.webHours || {
+        enabled: true,
+        open: '09:00',
+        close: '12:00',
+        force_status: 'auto',
+        isOpen: true,
+        statusText: 'Buka'
+    },
+
+    // Background Music (BGM) Playlist (Fitur Baru)
+    bgm: window.INITIAL_DATA?.bgm || { enabled: true, playlist: [] },
+};
+
+// Global Outlet Store Map for Fast Lookups
+const outletStore = new Map();
+if (AppState.outlet && AppState.outlet.code) {
+    outletStore.set(AppState.outlet.code, AppState.outlet);
+}
+(AppState.outlets || []).forEach(o => {
+    if (o && o.code) outletStore.set(o.code, o);
+});
+
+// Currency & String Formatting Helpers
+const $ = (sel) => document.querySelector(sel);
+const formatRp = (num) => 'Rp ' + Number(num || 0).toLocaleString('id-ID');
+const esc = (str) => {
+    if (str === null || str === undefined) return '';
+    if (typeof str === 'object') return esc(str?.name || str?.title || '');
+    return String(str).replace(/[&<>"']/g, s => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[s]));
+};
+
+// Outlet Status Helper: Check if visited outlet is closed
+function isOutletClosed() {
+    if (!AppState.outlet) return false;
+
+    // Explicit boolean / string checks from outlet state
+    if (AppState.outlet.canOrder === false || AppState.outlet.isOpen === false) return true;
+    if (AppState.outlet.canOrder === 'false' || AppState.outlet.isOpen === 'false') return true;
+
+    // Menu level isClosed flag from API
+    if (AppState.menu?.isClosed === true || AppState.menu?.isClosed === 'true') return true;
+    if (AppState.menu?.canOrder === false || AppState.menu?.canOrder === 'false') return true;
+
+    // Text status fallback check
+    const status = (AppState.outlet.statusText || '').toLowerCase().trim();
+    if (status.includes('tutup') || status.includes('closed') || status === 'off') {
+        return true;
+    }
+
+    return false;
+}
+
+// Toast Notification
+function showToast(msg) {
+    const wrap = document.getElementById('toastWrap');
+    if (!wrap) return;
+    wrap.innerHTML = `<div class="toast"><span>🌸</span><span>${msg}</span></div>`;
+    setTimeout(() => { wrap.innerHTML = ''; }, 3200);
+}
+
+// Modal Controllers
+function openSheet(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
+}
+
+function closeSheet(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+    if (id === 'adminPricingSheet') {
+        if (typeof adminPricingState !== 'undefined') {
+            adminPricingState.activePasscode = '';
+        }
+        sessionStorage.removeItem('kyuti_admin_auth');
+        sessionStorage.removeItem('kyuti_admin_code');
+        const passInput = document.getElementById('adminPasscodeInput');
+        if (passInput) passInput.value = '';
+    }
+}
+
+document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeSheet(btn.dataset.close));
+});
+
+document.querySelectorAll('.sheet-backdrop').forEach(backdrop => {
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) closeSheet(backdrop.id);
+    });
+});
+
+// Theme Controller (Light / Dark) ala twinsjasdor
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.dataset.theme = theme;
+    const metaTheme = document.getElementById('metaThemeColor') || document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+        metaTheme.content = theme === 'dark' ? '#190D13' : '#FFF5F7';
+    }
+}
+
+function initTheme() {
+    const saved = localStorage.getItem('kyuti_theme');
+    const isDark = saved ? saved === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    applyTheme(isDark ? 'dark' : 'light');
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try {
+        localStorage.setItem('kyuti_theme', next);
+    } catch (e) {}
+}
+
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', toggleTheme);
+}
+initTheme();
+
+// =========================================================================
+// 1. WELCOME POPUP & BIO HUB NAVIGATION (Revisi Poin 4 & 5)
+// =========================================================================
+
+// Check whether to show Welcome Popup on first load
+function checkWelcomePopup() {
+    const hasSeen = sessionStorage.getItem('kyuti_seen_welcome');
+    if (!hasSeen) {
+        openSheet('welcomeModal');
+    }
+}
+
+const closeWelcomeModalBtn = document.getElementById('closeWelcomeModalBtn');
+if (closeWelcomeModalBtn) {
+    closeWelcomeModalBtn.addEventListener('click', () => {
+        closeSheet('welcomeModal');
+        sessionStorage.setItem('kyuti_seen_welcome', '1');
+        // If on Hub view, user can immediately choose to open outlet or view store
+        openStoreView();
+        openSheet('outletSheet');
+    });
+}
+
+const openWelcomeBtn = document.getElementById('openWelcomeBtn');
+if (openWelcomeBtn) {
+    openWelcomeBtn.addEventListener('click', () => {
+        openSheet('welcomeModal');
+    });
+}
+
+// Switch between Bio Hub View and Store View
+function openStoreView() {
+    AppState.view = 'store';
+    const hub = document.getElementById('bioHubView');
+    const store = document.getElementById('storeView');
+    if (hub) hub.style.display = 'none';
+    if (store) store.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function openHubView() {
+    AppState.view = 'hub';
+    const hub = document.getElementById('bioHubView');
+    const store = document.getElementById('storeView');
+    if (hub) hub.style.display = 'block';
+    if (store) store.style.display = 'none';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+const openPricelistBtn = document.getElementById('openPricelistBtn');
+if (openPricelistBtn) {
+    openPricelistBtn.addEventListener('click', openStoreView);
+}
+
+const backToHubBtn = document.getElementById('backToHubBtn');
+if (backToHubBtn) {
+    backToHubBtn.addEventListener('click', openHubView);
+}
+
+const navHubToggleBtn = document.getElementById('navHubToggleBtn');
+if (navHubToggleBtn) {
+    navHubToggleBtn.addEventListener('click', () => {
+        if (AppState.view === 'store') {
+            openHubView();
+        } else {
+            openStoreView();
+        }
+    });
+}
+
+// =========================================================================
+// 2. OUTLET MANAGEMENT & PREMIUM OUTLET MODAL (Revisi Poin 9)
+// =========================================================================
+
+function isPremiumOutlet(outlet) {
+    if (!outlet) return false;
+
+    // 0. If explicit verified boolean exists (from live menu Mantan price >= 22k), use it directly!
+    if (typeof outlet.isPremium === 'boolean') {
+        return outlet.isPremium;
+    }
+    if (typeof outlet.premium === 'boolean') {
+        return outlet.premium;
+    }
+
+    const cat = (outlet.category || '').toLowerCase();
+    const name = (outlet.name || '').toLowerCase();
+    const addr = (outlet.address || '').toLowerCase();
+    const code = (outlet.code || '').toUpperCase();
+    const combined = `${cat} ${name} ${addr}`;
+
+    // 1. Gas station / SPBU (Shell, Pertamina, BP, SPBU) are regular outlets, NEVER premium
+    const isGasStation = cat.includes('gas station')
+        || combined.includes('spbu')
+        || combined.includes('pom bensin')
+        || name.startsWith('shell')
+        || name.startsWith('pertamina')
+        || name.startsWith('bp ');
+
+    if (isGasStation && !combined.includes('bandara') && !combined.includes('airport')) {
+        return false;
+    }
+
+    // 2. Check verified client premium outlet codes
+    const premiumCodes = window.INITIAL_DATA?.premiumCodes || [
+        'KK.KWG.GLHMAS', 'KK.TNG.RKBARNSRPG', 'KK.TNG.BNTROSKTR9', 'KK.JKT.GNDRKRMTPL',
+        'KK.JKT.RKMTRMNJT', 'SOPODEL', 'KK.YYK.BNTRBDYA', 'KK.SBY.JMSRI',
+        'SBY.AHMDYNMJO', 'KK.JKT.CKJNG', 'SAHID', 'KK.TRG.RKAMDMKSIN',
+        'DOCOKK.TRG.DNUSMYNG', 'KK.TNR.RKMNGABRUKT', 'KK.JKT.RKPCNGAN', 'KK.JKT.RWBLNGJKT',
+        'KK.BGR.SMBGR', 'KK.SKT.KPRABN', 'TGR.SDCSERPONG', 'BDG.CHMPLSWK',
+        'JKT.CFPIM2', 'JKT.FCPIM3', 'TGR.TERASKOTA'
+    ];
+    if (premiumCodes.includes(code)) {
+        return true;
+    }
+
+    // 3. Check verified client premium outlet names
+    const premiumList = window.INITIAL_DATA?.premiumList || [
+        'buaran serpong', 'bintaro sektor 9', 'galuh mas karawang', 'gandaria kramat pela',
+        'matraman', 'sopo del', 'kota baru jogja', 'jemursari', 'ahmad yani surabaya',
+        'cikajang', 'sahid sudirman', 'ahmad muksin tenggarong', 'danau semayang',
+        'ruko mangga berau', 'pecenongan', 'rawa belong', 'summarecon bogor',
+        'keprabon', 'summarecon digital center', 'cihampelas walk', 'pim 2', 'pim 3', 'teras kota'
+    ];
+    for (const pName of premiumList) {
+        const pLower = pName.toLowerCase();
+        if (name.includes(pLower) || combined.includes(pLower)) {
+            if (pLower.includes('galuh mas') && isGasStation) continue;
+            return true;
+        }
+    }
+
+    // 4. API explicit indicator
+    if (outlet.isPremium === true || outlet.premium === true) {
+        return true;
+    }
+
+    // 5. Major Airport Terminals & verified transport hubs keywords
+    // Note: Generic 'mall' or 'plaza' are excluded because most malls have regular 19k price!
+    const keywords = [
+        'terminal bandara', 'keberangkatan bandara', 'airport departure', 'bandara internasional',
+        'terminal 2d', 'terminal 2e', 'terminal 3 domestic', 'terminal 3 international',
+        'grand indonesia', 'senayan city', 'pacific place', 'tunjungan plaza 3', 'pim 3'
+    ];
+
+    return keywords.some(k => combined.includes(k));
+}
+
+function checkAndShowPremiumOutletAlert(outlet) {
+    if (outlet?.isPremium) {
+        const descEl = document.getElementById('premiumOutletDesc');
+        if (descEl) {
+            descEl.innerHTML = `Harga di <b id="premiumOutletNameText"></b> lebih mahal dari outlet biasa. Harga dan menu menyesuaikan. Untuk paket bundling tidak tersedia di outlet premium.`;
+            const nameEl = descEl.querySelector('#premiumOutletNameText');
+            if (nameEl) nameEl.textContent = outlet.name || 'Outlet';
+        } else {
+            const nameEl = document.getElementById('premiumOutletNameText');
+            if (nameEl) nameEl.textContent = outlet.name || 'Outlet';
+        }
+        openSheet('premiumOutletModal');
+    }
+}
+
+const premiumOutletOkBtn = document.getElementById('premiumOutletOkBtn');
+if (premiumOutletOkBtn) {
+    premiumOutletOkBtn.addEventListener('click', () => {
+        closeSheet('premiumOutletModal');
+    });
+}
+
+// Update Outlet Header UI
+function updateOutletHeader() {
+    if (!AppState.outlet) return;
+    const nameEl = document.getElementById('currentOutletName');
+    const statusEl = document.getElementById('currentOutletStatus');
+    const hoursEl = document.getElementById('currentOutletHours');
+    const barOutletEl = document.getElementById('cartBarOutletName');
+    const sheetOutletEl = document.getElementById('cartSheetOutletName');
+    const premiumBadge = document.getElementById('premiumOutletBadge');
+
+    if (nameEl) nameEl.textContent = AppState.outlet.name;
+    if (statusEl) {
+        const closed = isOutletClosed();
+        statusEl.textContent = closed ? (AppState.outlet.statusText || 'Tutup') : (AppState.outlet.statusText || 'Buka');
+        statusEl.className = 'pill ' + (closed ? 'pill-closed' : 'pill-open');
+    }
+    if (hoursEl) hoursEl.textContent = '• ' + (AppState.outlet.hours || 'Buka Setiap Hari');
+    if (barOutletEl) barOutletEl.textContent = AppState.outlet.name;
+    if (sheetOutletEl) sheetOutletEl.textContent = AppState.outlet.name;
+
+    if (premiumBadge) {
+        premiumBadge.style.display = AppState.outlet?.isPremium ? 'inline-flex' : 'none';
+    }
+}
+
+// Render Outlet Items in Picker Sheet
+function renderOutletList(items) {
+    const container = document.getElementById('outletListContainer');
+    if (!container) return;
+
+    if (!items || !items.length) {
+        container.innerHTML = '<div class="empty-box"><p>Outlet tidak ditemukan.</p></div>';
+        return;
+    }
+
+    items.forEach(o => {
+        if (o && o.code) {
+            const existing = outletStore.get(o.code);
+            if (existing && typeof existing.isPremium === 'boolean') {
+                o.isPremium = existing.isPremium;
+                o.premium = existing.isPremium;
+            } else {
+                outletStore.set(o.code, o);
+            }
+        }
+    });
+
+    container.innerHTML = items.map(o => {
+        const isActive = AppState.outlet && AppState.outlet.code === o.code;
+        const safeCode = (o.code || '').replace(/"/g, '&quot;');
+        const safeName = (o.name || '').replace(/"/g, '&quot;');
+        const safeStatus = (o.statusText || 'Buka').replace(/"/g, '&quot;');
+        const safeHours = (o.hours || '').replace(/"/g, '&quot;');
+        const safeImg = (o.img || 'https://cdn.kopikenangan.com/public/da484154-47b1-a756-54a4-8b3490fb0eae').replace(/"/g, '&quot;');
+        const isPrem = isPremiumOutlet(o);
+
+        return `
+            <div class="outlet-item ${isActive ? 'active' : ''}" 
+                 data-code="${safeCode}"
+                 data-name="${safeName}"
+                 data-status="${safeStatus}"
+                 data-hours="${safeHours}"
+                 data-canorder="${o.canOrder ? 'true' : 'false'}"
+                 data-img="${safeImg}">
+                <img class="outlet-thumb" src="${safeImg}" alt="${safeName}" onerror="this.src='https://placehold.co/100x100?text=Kopi'">
+                <div class="outlet-item-body">
+                    <div class="oib-title">
+                        <span>${o.name}</span>
+                        ${o.distanceKm ? `<span class="oib-distance">${o.distanceKm} km</span>` : ''}
+                    </div>
+                    <div class="oib-address">${o.address || ''}</div>
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                        <span class="pill ${o.canOrder ? 'pill-open' : 'pill-closed'}">${o.statusText || 'Buka'}</span>
+                        ${isPrem ? '<span class="pill pill-premium">Outlet Premium</span>' : ''}
+                        <span style="font-size:11px;color:var(--text-muted)">${o.hours || ''}</span>
+                    </div>
+                </div>
+                ${isActive ? '<div style="color:var(--brand-primary-dark);font-weight:900;font-size:18px;display:flex;align-items:center;padding-left:4px;">✓</div>' : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// Event Delegation for Outlet Selection
+const outletListContainer = document.getElementById('outletListContainer');
+if (outletListContainer) {
+    outletListContainer.addEventListener('click', (e) => {
+        const item = e.target.closest('.outlet-item');
+        if (!item) return;
+        const code = item.dataset.code;
+        if (code) selectOutlet(code);
+    });
+}
+
+window.selectOutlet = function(code) {
+    if (!code) return;
+
+    let found = outletStore.get(code) || (AppState.outlets || []).find(o => o.code === code);
+    if (!found) {
+        const el = document.querySelector(`.outlet-item[data-code="${code}"]`);
+        if (el) {
+            found = {
+                code: code,
+                name: el.dataset.name || code,
+                statusText: el.dataset.status || 'Buka',
+                canOrder: el.dataset.canorder === 'true',
+                hours: el.dataset.hours || 'Buka Setiap Hari',
+                img: el.dataset.img || ''
+            };
+            outletStore.set(code, found);
+        }
+    }
+
+    if (!found) return;
+
+    AppState.outlet = found;
+    updateOutletHeader();
+
+    document.querySelectorAll('.outlet-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.code === code);
+    });
+
+    closeSheet('outletSheet');
+    if (isOutletClosed()) {
+        showToast(`⚠️ Perhatian: ${found.name} saat ini sedang tutup`);
+    } else {
+        showToast(`✓ Outlet aktif: ${found.name}`);
+    }
+
+    // If already verified as Premium from previous menu fetch, show alert immediately
+    if (found.isPremium === true) {
+        checkAndShowPremiumOutletAlert(found);
+    }
+
+    if (window.history && window.history.pushState) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('outlet', found.code);
+        window.history.pushState({ outlet: found.code }, '', url.toString());
+    }
+
+    fetchMenu(found.code, false);
+    fetchWifi(found.code);
+};
+
+const outletCardBtn = document.getElementById('outletCardBtn');
+if (outletCardBtn) {
+    outletCardBtn.addEventListener('click', () => {
+        renderOutletList(AppState.outlets);
+        openSheet('outletSheet');
+    });
+}
+
+// Live Search Outlets via API
+let outletSearchTimer;
+const outletSearchInput = document.getElementById('outletSearchInput');
+if (outletSearchInput) {
+    outletSearchInput.addEventListener('input', (e) => {
+        clearTimeout(outletSearchTimer);
+        const query = e.target.value.trim();
+        outletSearchTimer = setTimeout(() => {
+            fetch(`api/outlets.php?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => {
+                    const list = data.outlets || [];
+                    list.forEach(o => outletStore.set(o.code, o));
+                    renderOutletList(list);
+                })
+                .catch(() => {
+                    showToast('Gagal mencari outlet.');
+                });
+        }, 250);
+    });
+}
+
+// Geo Location Trigger
+const geoBtn = document.getElementById('geoBtn');
+if (geoBtn) {
+    geoBtn.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            showToast('Browser kamu belum mendukung akses lokasi');
+            return;
+        }
+        geoBtn.innerHTML = '<span>Mencari lokasi kamu...</span>';
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                fetch(`api/outlets.php?lat=${lat}&lng=${lng}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        geoBtn.innerHTML = '<span>✓ Lokasi Ditemukan (Urut Terdekat)</span>';
+                        const list = data.outlets || [];
+                        list.forEach(o => outletStore.set(o.code, o));
+                        AppState.outlets = list;
+                        renderOutletList(list);
+                    })
+                    .catch(() => {
+                        geoBtn.innerHTML = '<span>✕ Gagal memuat outlet terdekat</span>';
+                    });
+            },
+            () => {
+                geoBtn.innerHTML = '<span>✕ Izin lokasi ditolak</span>';
+                setTimeout(() => {
+                    geoBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Pakai Lokasi Saya (Cari Outlet Terdekat)</span>';
+                }, 2000);
+            }
+        );
+    });
+}
+
+// =========================================================================
+// 3. MENU RENDERING & FETCHING (Revisi Poin 6, 7 & 12)
+// =========================================================================
+
+function fetchMenu(outletCode, forceRefresh = false) {
+    const refreshBtn = document.getElementById('refreshStockBtn');
+    if (refreshBtn) refreshBtn.classList.add('spinning');
+
+    fetch(`api/menu.php?outlet=${encodeURIComponent(outletCode)}&refresh=${forceRefresh ? 1 : 0}${forceRefresh ? `&_t=${Date.now()}` : ''}`)
+        .then(res => res.json())
+        .then(data => {
+            // Guard against temporary upstream glitch where 100% of items are marked sold-out on an open outlet
+            if (data && Array.isArray(data.items) && data.items.length > 5 && !data.isClosed) {
+                const avail = data.items.filter(i => !i.isSoldOut && !i.notCarried).length;
+                if (avail === 0 && Array.isArray(AppState.menu?.items) && AppState.menu.items.length > 0) {
+                    const prevAvail = AppState.menu.items.filter(i => !i.isSoldOut && !i.notCarried).length;
+                    if (prevAvail > 0) {
+                        showToast('⚠️ Sinkronisasi stok upstream sedang kendala, menggunakan cache stok aktif.');
+                        return;
+                    }
+                }
+            }
+
+            AppState.menu = data;
+
+            // Sync closed status if data indicates isClosed
+            if (data && typeof data.isClosed === 'boolean') {
+                if (data.isClosed && AppState.outlet) {
+                    AppState.outlet.canOrder = false;
+                    AppState.outlet.isOpen = false;
+                    if (!AppState.outlet.statusText || AppState.outlet.statusText === 'Buka') {
+                        AppState.outlet.statusText = 'Tutup';
+                    }
+                    outletStore.set(AppState.outlet.code, AppState.outlet);
+                    updateOutletHeader();
+                }
+            }
+
+            // Absolute Client Rule: Single source of truth is Kopi Kenangan Mantan normalPrice >= 22k
+            let isPrem = false;
+            if (Array.isArray(data.items)) {
+                const mantan = data.items.find(i => {
+                    const n = (i.name || '').toLowerCase();
+                    return n.includes('kenangan mantan') && !n.includes('oatside') && !n.includes('frappe') && !n.includes('bundl') && !n.includes('duo');
+                });
+                if (mantan) {
+                    const normalP = Number(mantan.normalPrice || mantan.outletPrice || 0);
+                    isPrem = normalP >= 22000;
+                } else {
+                    isPrem = Boolean(data.premium);
+                }
+            } else {
+                isPrem = Boolean(data.premium);
+            }
+
+            if (AppState.outlet) {
+                AppState.outlet.isPremium = isPrem;
+                AppState.outlet.premium = isPrem;
+                outletStore.set(AppState.outlet.code, AppState.outlet);
+                updateOutletHeader();
+                if (isPrem) {
+                    checkAndShowPremiumOutletAlert(AppState.outlet);
+                }
+            }
+
+            const totalEl = document.getElementById('statTotalItems');
+            const readyEl = document.getElementById('statReadyItems');
+            const soldEl = document.getElementById('statSoldItems');
+            const sourceEl = document.getElementById('liveSourceText');
+            const syncEl = document.getElementById('lastSyncTime');
+
+            if (totalEl) totalEl.textContent = data.stats?.total || 0;
+            if (readyEl) readyEl.textContent = data.stats?.available || 0;
+            if (soldEl) soldEl.textContent = data.stats?.soldOut || 0;
+            if (sourceEl) sourceEl.textContent = data.live ? `Stok Live dari Outlet: ${AppState.outlet?.name}` : 'Mode Offline / Fallback';
+            if (syncEl) syncEl.textContent = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+
+            renderMenu();
+            updateCartUI();
+            populateMenuDropdown();
+            showToast(forceRefresh ? '✓ Stok outlet berhasil diperbarui!' : `Stok siap untuk ${AppState.outlet?.name}`);
+        })
+        .catch(() => {
+            showToast('Gagal memuat stok outlet.');
+        })
+        .finally(() => {
+            if (refreshBtn) refreshBtn.classList.remove('spinning');
+        });
+}
+
+const refreshStockBtn = document.getElementById('refreshStockBtn');
+if (refreshStockBtn) {
+    refreshStockBtn.addEventListener('click', () => {
+        if (AppState.outlet?.code) {
+            fetchMenu(AppState.outlet.code, true);
+        }
+    });
+}
+
+// Category Filter
+document.querySelectorAll('.cat-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        AppState.activeCategory = btn.dataset.cat;
+        renderMenu();
+    });
+});
+
+// Search Filter
+const menuSearchInput = document.getElementById('menuSearchInput');
+if (menuSearchInput) {
+    menuSearchInput.addEventListener('input', (e) => {
+        AppState.searchQuery = e.target.value.toLowerCase().trim();
+        renderMenu();
+    });
+}
+
+// Render Menu Cards
+function renderMenu() {
+    const container = document.getElementById('menuContainer');
+    if (!container) return;
+
+    const items = AppState.menu?.items || [];
+    const outletClosed = isOutletClosed();
+    
+    const bStatus = adminPricingState?.bundlingStatus || window.INITIAL_DATA?.pricing?.bundlingStatus;
+    const filtered = items.filter(item => {
+        // Hide items that this outlet does not carry (discontinued seasonal promos / not sold here)
+        if (item.notCarried) return false;
+        if ((item.category === 'Bundling' || item.isBundling) && bStatus && item.key && bStatus[item.key] === false) {
+            return false;
+        }
+        const matchesCat = AppState.activeCategory === 'all' || item.category === AppState.activeCategory;
+        const matchesSearch = !AppState.searchQuery || 
+            item.name.toLowerCase().includes(AppState.searchQuery) ||
+            (item.desc && item.desc.toLowerCase().includes(AppState.searchQuery));
+        return matchesCat && matchesSearch;
+    });
+
+    // Sort: Available items first, sold-out items at the bottom
+    filtered.sort((a, b) => {
+        const aSold = Boolean(a.isSoldOut);
+        const bSold = Boolean(b.isSoldOut);
+        if (aSold !== bSold) return aSold ? 1 : -1;
+        return 0;
+    });
+
+    const closedBannerHtml = outletClosed ? `
+        <div class="outlet-closed-banner" id="outletClosedBanner">
+            <div class="ocb-icon-wrap">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+            </div>
+            <div class="ocb-content">
+                <div class="ocb-title">Outlet Sedang Tutup</div>
+                <div class="ocb-desc">
+                    <b>${esc(AppState.outlet?.name || 'Outlet')}</b> saat ini sedang tutup${AppState.outlet?.hours ? ` (${esc(AppState.outlet.hours)})` : ''}. Semua menu dinonaktifkan sementara. Silakan ganti outlet yang sedang buka untuk memesan.
+                </div>
+            </div>
+            <button type="button" class="ocb-btn" onclick="openSheet('outletSheet')">
+                <span>Ganti Outlet</span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+        </div>
+    ` : '';
+
+    if (!filtered.length) {
+        container.innerHTML = `
+            ${closedBannerHtml}
+            <div class="empty-box">
+                <div class="empty-icon">☕</div>
+                <h4>Menu Tidak Ditemukan</h4>
+                <p>Coba kata kunci pencarian lain atau pilih kategori berbeda.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        ${closedBannerHtml}
+        <div class="sec-title">
+            <span>Menampilkan ${filtered.length} menu ${outletClosed ? '• (Outlet Tutup)' : ''}</span>
+        </div>
+        <div class="menu-grid">
+            ${filtered.map(item => {
+                const isSold = item.isSoldOut || item.notCarried;
+                const safeKey = (item.key || item.id || '').replace(/"/g, '&quot;');
+                const isBundle = item.category === 'Bundling' || item.isBundling;
+
+                let cardClasses = 'product-card';
+                if (outletClosed) {
+                    cardClasses += ' outlet-closed-card';
+                } else if (isSold) {
+                    cardClasses += ' sold-out';
+                }
+
+                let badgeHtml = '';
+                if (outletClosed) {
+                    badgeHtml = `<span class="stock-badge closed">✕ Outlet Tutup</span>`;
+                } else if (isSold) {
+                    badgeHtml = `<span class="stock-badge empty">✕ Habis di Outlet</span>`;
+                } else {
+                    badgeHtml = `<span class="stock-badge ready">● Stok Ready</span>`;
+                }
+
+                let btnText = '+ Tambah';
+                let btnDisabled = false;
+                if (outletClosed) {
+                    btnText = 'Outlet Tutup';
+                    btnDisabled = true;
+                } else if (isSold) {
+                    btnText = 'Stok Habis';
+                    btnDisabled = true;
+                } else if (isBundle) {
+                    btnText = 'Pilih Paket';
+                }
+
+                return `
+                    <div class="${cardClasses}" data-key="${safeKey}">
+                        <div class="product-img-wrap">
+                            <img src="${item.img || 'https://cdn.kopikenangan.com/public/da484154-47b1-a756-54a4-8b3490fb0eae'}" alt="${item.name}" loading="lazy" onerror="this.src='https://placehold.co/200x200?text=Kopi+Kenangan'">
+                            ${badgeHtml}
+                            ${item.tag ? `<span class="promo-tag">${item.tag}</span>` : ''}
+                        </div>
+                        <h4 class="product-name">${item.name}</h4>
+                        <div class="product-cat">${item.category || 'Minuman'}</div>
+                        <div class="product-price-row">
+                            <span class="product-price">${item.priceLabel ? item.priceLabel : formatRp(item.price)}</span>
+                            ${item.normalPrice && item.normalPrice > item.price ? `<span class="product-normal-price">${formatRp(item.normalPrice)}</span>` : ''}
+                        </div>
+                        <button class="product-add-btn" type="button" ${btnDisabled ? 'disabled aria-disabled="true"' : ''}>
+                            ${btnText}
+                        </button>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+// Card Click Delegation
+const menuContainer = document.getElementById('menuContainer');
+if (menuContainer) {
+    menuContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('.product-card');
+        if (!card) return;
+
+        if (isOutletClosed()) {
+            showToast(`⚠️ Maaf, Outlet ${AppState.outlet?.name || ''} sedang tutup. Silakan pilih outlet lain.`);
+            openSheet('outletSheet');
+            return;
+        }
+
+        const key = card.dataset.key;
+        const item = (AppState.menu?.items || []).find(i => (i.key || i.id) === key);
+        if (!item) return;
+
+        if (item.isSoldOut || item.notCarried) {
+            showToast('Maaf, menu ini sedang habis di outlet ini.');
+            return;
+        }
+
+        if (item.category === 'Bundling' || item.isBundling) {
+            openBundlingModal(item);
+        } else {
+            openProductModal(item);
+        }
+    });
+}
+
+// =========================================================================
+// 4. BUNDLING MODAL CONTROLLER (Per-Item Customizer, Live Stock & Admin Control)
+// =========================================================================
+
+function normBundleStr(str) {
+    return String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+const BUNDLE_ITEM_ALIASES = {
+    'chocochipcookie': ['chocochipcookie', 'chocochipcookies'],
+    'bananachocosoftbake': ['bananachocosoftbakedcookie', 'bananachocosoftbake', 'bananachoco'],
+    'sweethoneysoftbake': ['sweethoneysoftbakedcookie', 'sweethoneysoftbake'],
+    'oatmealraisinsoftbake': ['oatmealraisinsoftbakedcookie', 'oatmealraisinsoftbake'],
+    'dutchchocokenangan': ['dutchchocokenanganfrappe', 'dutchchocolate', 'dutchchocokenangan'],
+    'butterscotchkenangan': ['butterscotchkenanganfrappe', 'butterscotchkenangan'],
+};
+
+const BUNDLING_FOOD_ITEMS = new Set([
+    'classic peanut butter panini', 'butter croissant', 'salt bread sausage',
+    'salt bread choco butter', 'friend chip cookie', 'choco chip cookie',
+    'chocolate croissant', 'bananachoco soft bake', 'sweet honey soft bake',
+    'oatmeal raisin soft bake', 'chocolate donut', 'donut almond',
+    'double choco bagel', 'vanilla choux puff', 'strawberry choux puff',
+    'chocolate choux puff', 'bambang choco cheese toast', 'adam ayam toast',
+    'triple cheese bagel', 'wahyu sapi toast', 'roti srikaya'
+]);
+
+function isBundlingFoodItem(name) {
+    if (!name) return false;
+    const n = String(name).toLowerCase().trim();
+    if (BUNDLING_FOOD_ITEMS.has(n)) return true;
+    return /croissant|panini|toast|bread|cookie|donut|bagel|puff|bake|srikaya|roti/i.test(n);
+}
+
+function isSingleItemSoldOut(name) {
+    const menuItems = AppState.menu?.items || [];
+    if (!menuItems.length) return false;
+
+    const n = normBundleStr(name);
+    const targets = BUNDLE_ITEM_ALIASES[n] || [n];
+
+    // 1. Direct exact normalized match
+    for (const it of menuItems) {
+        const itN = normBundleStr(it.name);
+        for (const t of targets) {
+            if (itN === t) {
+                return Boolean(it.isSoldOut || it.notCarried);
+            }
+        }
+    }
+
+    // 2. Substring startsWith match for longer names (>= 6 chars)
+    for (const it of menuItems) {
+        const itN = normBundleStr(it.name);
+        for (const t of targets) {
+            if (t.length >= 6 && (itN.startsWith(t) || t.startsWith(itN))) {
+                return Boolean(it.isSoldOut || it.notCarried);
+            }
+        }
+    }
+
+    // 3. Not found in current outlet's menu -> outlet doesn't carry it -> Habis!
+    return true;
+}
+
+function isBundleOptionDisabledByAdmin(opt) {
+    let optName = typeof opt === 'string' ? opt : (opt?.name || '');
+    const disabledList = adminPricingState?.disabledBundlingOptions || window.INITIAL_DATA?.pricing?.disabledBundlingOptions || [];
+    if (!disabledList.length) return false;
+    if (disabledList.includes(optName)) return true;
+    if (optName.includes('+')) {
+        const parts = optName.split('+').map(p => p.trim());
+        for (const p of parts) {
+            if (disabledList.includes(p)) return true;
+        }
+    }
+    return false;
+}
+
+function isBundleOptionSoldOut(opt) {
+    let optName = typeof opt === 'string' ? opt : (opt?.name || '');
+    // 1. Check if disabled via admin toggle
+    if (isBundleOptionDisabledByAdmin(optName)) {
+        return true;
+    }
+    // 2. Check live outlet stock
+    if (optName.includes('+')) {
+        const parts = optName.split('+').map(p => p.trim());
+        for (const p of parts) {
+            if (isSingleItemSoldOut(p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return isSingleItemSoldOut(optName);
+}
+
+function renderBundleSlotCustomizer(sIdx) {
+    const box = document.getElementById(`bundleCustomBox_${sIdx}`);
+    if (!box) return;
+
+    const choice = AppState.bundleSlotChoices[sIdx];
+    if (!choice || !choice.name) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+
+    const optName = choice.name;
+
+    // Food item -> hide customizer because food has no ice/sugar options
+    if (isBundlingFoodItem(optName)) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+
+    if (!AppState.bundleSlotPrefs[sIdx]) {
+        AppState.bundleSlotPrefs[sIdx] = {};
+    }
+
+    // Frappe Combo (2 cups in one slot, separated by '+')
+    if (optName.includes('+')) {
+        const cups = optName.split('+').map(c => c.trim());
+        const cup1Name = cups[0] || 'Cup 1';
+        const cup2Name = cups[1] || 'Cup 2';
+
+        if (!AppState.bundleSlotPrefs[sIdx].cup1) {
+            AppState.bundleSlotPrefs[sIdx].cup1 = { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+        }
+        if (!AppState.bundleSlotPrefs[sIdx].cup2) {
+            AppState.bundleSlotPrefs[sIdx].cup2 = { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+        }
+
+        const p1 = AppState.bundleSlotPrefs[sIdx].cup1;
+        const p2 = AppState.bundleSlotPrefs[sIdx].cup2;
+
+        box.style.display = 'block';
+        box.innerHTML = `
+            <div class="bundle-cup-custom-group">
+                <div class="bundle-cup-pref-header">🥤 Cup 1: <b>${esc(cup1Name)}</b></div>
+                <div class="bundle-pref-row">
+                    <span class="bundle-pref-title">Es:</span>
+                    <div class="bundle-pref-pills" data-slot="${sIdx}" data-cup="cup1" data-type="ice">
+                        <button type="button" class="og-pill ${p1.ice === 'Normal Ice' ? 'active' : ''}" data-val="Normal Ice">Normal Ice</button>
+                        <button type="button" class="og-pill ${p1.ice === 'Less Ice' ? 'active' : ''}" data-val="Less Ice">Less Ice</button>
+                    </div>
+                </div>
+                <div class="bundle-pref-row">
+                    <span class="bundle-pref-title">Gula:</span>
+                    <div class="bundle-pref-pills" data-slot="${sIdx}" data-cup="cup1" data-type="sugar">
+                        <button type="button" class="og-pill ${p1.sugar === 'Normal Sugar' ? 'active' : ''}" data-val="Normal Sugar">Normal Sugar</button>
+                        <button type="button" class="og-pill ${p1.sugar === 'Less Sugar (50%)' ? 'active' : ''}" data-val="Less Sugar (50%)">Less Sugar</button>
+                        <button type="button" class="og-pill ${p1.sugar === 'No Sugar' ? 'active' : ''}" data-val="No Sugar">No Sugar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bundle-cup-custom-group">
+                <div class="bundle-cup-pref-header">🥤 Cup 2: <b>${esc(cup2Name)}</b></div>
+                <div class="bundle-pref-row">
+                    <span class="bundle-pref-title">Es:</span>
+                    <div class="bundle-pref-pills" data-slot="${sIdx}" data-cup="cup2" data-type="ice">
+                        <button type="button" class="og-pill ${p2.ice === 'Normal Ice' ? 'active' : ''}" data-val="Normal Ice">Normal Ice</button>
+                        <button type="button" class="og-pill ${p2.ice === 'Less Ice' ? 'active' : ''}" data-val="Less Ice">Less Ice</button>
+                    </div>
+                </div>
+                <div class="bundle-pref-row">
+                    <span class="bundle-pref-title">Gula:</span>
+                    <div class="bundle-pref-pills" data-slot="${sIdx}" data-cup="cup2" data-type="sugar">
+                        <button type="button" class="og-pill ${p2.sugar === 'Normal Sugar' ? 'active' : ''}" data-val="Normal Sugar">Normal Sugar</button>
+                        <button type="button" class="og-pill ${p2.sugar === 'Less Sugar (50%)' ? 'active' : ''}" data-val="Less Sugar (50%)">Less Sugar</button>
+                        <button type="button" class="og-pill ${p2.sugar === 'No Sugar' ? 'active' : ''}" data-val="No Sugar">No Sugar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Single drink slot
+    if (!AppState.bundleSlotPrefs[sIdx].single) {
+        AppState.bundleSlotPrefs[sIdx].single = { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+    }
+    const p = AppState.bundleSlotPrefs[sIdx].single;
+
+    box.style.display = 'block';
+    box.innerHTML = `
+        <div class="bundle-cup-custom-group">
+            <div class="bundle-cup-pref-header">🥤 Pilihan Minuman: <b>${esc(optName)}</b></div>
+            <div class="bundle-pref-row">
+                <span class="bundle-pref-title">Es:</span>
+                <div class="bundle-pref-pills" data-slot="${sIdx}" data-cup="single" data-type="ice">
+                    <button type="button" class="og-pill ${p.ice === 'Normal Ice' ? 'active' : ''}" data-val="Normal Ice">Normal Ice</button>
+                    <button type="button" class="og-pill ${p.ice === 'Less Ice' ? 'active' : ''}" data-val="Less Ice">Less Ice</button>
+                </div>
+            </div>
+            <div class="bundle-pref-row">
+                <span class="bundle-pref-title">Gula:</span>
+                <div class="bundle-pref-pills" data-slot="${sIdx}" data-cup="single" data-type="sugar">
+                    <button type="button" class="og-pill ${p.sugar === 'Normal Sugar' ? 'active' : ''}" data-val="Normal Sugar">Normal Sugar</button>
+                    <button type="button" class="og-pill ${p.sugar === 'Less Sugar (50%)' ? 'active' : ''}" data-val="Less Sugar (50%)">Less Sugar</button>
+                    <button type="button" class="og-pill ${p.sugar === 'No Sugar' ? 'active' : ''}" data-val="No Sugar">No Sugar</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateBundleModalPrice() {
+    if (!AppState.activeBundle) return;
+    const priceEl = document.getElementById('bundleModalPrice');
+    const addBtn = document.getElementById('addBundleToCartBtn');
+
+    let finalPrice = AppState.activeBundle.price;
+
+    // If options have dynamic price (e.g. Frappe bundle or Promo), take from selected choice
+    const selectedChoices = Object.values(AppState.bundleSlotChoices || {});
+    const customPrices = selectedChoices.map(c => c?.price).filter(p => typeof p === 'number' && p > 0);
+
+    if (customPrices.length > 0) {
+        finalPrice = customPrices[0];
+    }
+
+    AppState.activeBundle.currentPrice = finalPrice;
+    if (priceEl) priceEl.textContent = formatRp(finalPrice);
+    if (addBtn && !addBtn.disabled) {
+        addBtn.textContent = `Tambahkan ke Keranjang • ${formatRp(finalPrice)}`;
+    }
+}
+
+function openBundlingModal(bundle) {
+    if (isOutletClosed()) {
+        showToast(`⚠️ Outlet ${AppState.outlet?.name || ''} sedang tutup.`);
+        openSheet('outletSheet');
+        return;
+    }
+    AppState.activeBundle = bundle;
+    AppState.bundleSlotChoices = {};
+    AppState.bundleSlotPrefs = {};
+    AppState.bundleIce = 'Normal Ice';
+    AppState.bundleSugar = 'Normal Sugar';
+
+    const titleEl = document.getElementById('bundleModalTitle');
+    const descEl = document.getElementById('bundleModalDesc');
+    const priceEl = document.getElementById('bundleModalPrice');
+    const normalPriceEl = document.getElementById('bundleModalNormalPrice');
+    const imgEl = document.getElementById('bundleModalImg');
+    const slotsContainer = document.getElementById('bundleSlotsContainer');
+    const noticeEl = document.getElementById('bundleStockNotice');
+    const addBtn = document.getElementById('addBundleToCartBtn');
+
+    if (titleEl) titleEl.textContent = bundle.name;
+    if (descEl) descEl.textContent = bundle.desc || 'Pilih kombinasi varian menu dalam paket bundling ini.';
+    if (priceEl) priceEl.textContent = bundle.priceLabel ? bundle.priceLabel : formatRp(bundle.price);
+    if (normalPriceEl) normalPriceEl.textContent = bundle.normalPrice ? formatRp(bundle.normalPrice) : '';
+    if (imgEl) imgEl.src = bundle.img || 'assets/img/bundling/PAKET BUNDLING 2 CUP LARGE.jpeg';
+
+    if (noticeEl) {
+        noticeEl.style.display = 'none';
+        noticeEl.innerHTML = '';
+    }
+
+    let hasUnavailableRequiredSlot = false;
+    const slots = bundle.slots || [];
+
+    if (slotsContainer) {
+        slotsContainer.innerHTML = slots.map((slot, sIdx) => {
+            let optionsHtml = '';
+            let selectedOptForSlot = null;
+
+            // Helper to render an option card
+            const renderCard = (opt) => {
+                const optName = typeof opt === 'string' ? opt : (opt?.name || '');
+                const optPrice = (typeof opt === 'object' && opt?.price) ? opt.price : null;
+                const isSoldOut = isBundleOptionSoldOut(opt);
+                const isDisabledByAdmin = isBundleOptionDisabledByAdmin(opt);
+
+                let isSelected = false;
+                if (!isSoldOut && !selectedOptForSlot) {
+                    selectedOptForSlot = { name: optName, price: optPrice };
+                    isSelected = true;
+                }
+
+                const priceBadge = optPrice ? `<span class="bundle-opt-price">${formatRp(optPrice)}</span>` : '';
+                const soldBadge = isSoldOut ? `<span class="bundle-opt-badge-sold">${isDisabledByAdmin ? '✕ Nonaktif' : '✕ Habis'}</span>` : '';
+                
+                // Khusus PAKET HEMAT 3 ITEM, jangan gunakan grid-column span agar layout rapi 2 kolom simetris tanpa celah kosong
+                const isHemat3Item = (bundle.key === 'bundle_hemat_3_item');
+                const singleColClass = (!isHemat3Item && optName.length > 28) ? 'style="grid-column: 1 / -1;"' : '';
+
+                return `
+                    <div class="bundle-choice-card ${isSelected ? 'selected' : ''} ${isSoldOut ? 'sold-out' : ''}" 
+                         data-slot="${sIdx}" 
+                         data-val="${esc(optName)}" 
+                         ${optPrice ? `data-price="${optPrice}"` : ''}
+                         ${isSoldOut ? 'aria-disabled="true"' : ''}
+                         ${singleColClass}>
+                        <span class="bundle-opt-name">${esc(optName)}</span>
+                        ${soldBadge}
+                        ${priceBadge}
+                    </div>
+                `;
+            };
+
+            // Categorized groups (e.g. Minuman vs Makanan in Paket Hemat 3 Item)
+            let customBoxRendered = false;
+            if (slot.groups && typeof slot.groups === 'object') {
+                for (const [groupTitle, groupItems] of Object.entries(slot.groups)) {
+                    const isDrinkGroup = /minuman|drink|kopi|coffee|tea|frappe/i.test(groupTitle);
+                    optionsHtml += `
+                        <div class="bundle-subgroup-title">${esc(groupTitle)}</div>
+                        <div class="bundle-choices-grid" data-slot="${sIdx}">
+                            ${groupItems.map(renderCard).join('')}
+                        </div>
+                    `;
+                    // Place the customizer (Ice / Sugar) directly below the Minuman options so customer won't skip it
+                    if (isDrinkGroup && !customBoxRendered) {
+                        optionsHtml += `
+                            <div class="bundle-slot-custom-box" id="bundleCustomBox_${sIdx}" style="display:none"></div>
+                        `;
+                        customBoxRendered = true;
+                    }
+                }
+            } else {
+                // Regular or variant list
+                const isSingleCol = (slot.options || []).some(o => (typeof o === 'string' ? o : o.name || '').length > 28);
+                optionsHtml = `
+                    <div class="bundle-choices-grid ${isSingleCol ? 'single-col' : ''}" data-slot="${sIdx}">
+                        ${(slot.options || []).map(renderCard).join('')}
+                    </div>
+                `;
+            }
+
+            if (!customBoxRendered) {
+                optionsHtml += `
+                    <div class="bundle-slot-custom-box" id="bundleCustomBox_${sIdx}" style="display:none"></div>
+                `;
+            }
+
+            if (selectedOptForSlot) {
+                AppState.bundleSlotChoices[sIdx] = selectedOptForSlot;
+            } else {
+                hasUnavailableRequiredSlot = true;
+            }
+
+            return `
+                <div class="bundle-slot-box" data-slot-box="${sIdx}">
+                    <div class="bundle-slot-label">
+                        <span>🎀</span>
+                        <span>${slot.label || `Pilihan ${sIdx + 1}`}</span>
+                    </div>
+                    ${optionsHtml}
+                </div>
+            `;
+        }).join('');
+
+        // Render initial customizers for pre-selected slot choices
+        slots.forEach((_, sIdx) => {
+            renderBundleSlotCustomizer(sIdx);
+        });
+    }
+
+    if (hasUnavailableRequiredSlot) {
+        if (noticeEl) {
+            noticeEl.style.display = 'block';
+            noticeEl.innerHTML = `⚠️ <b>Menu Paket Habis</b>: Beberapa pilihan menu dalam paket ini sedang kosong atau dinonaktifkan di <b>${esc(AppState.outlet?.name || 'outlet ini')}</b>. Silakan coba paket lain atau ganti outlet.`;
+        }
+        if (addBtn) {
+            addBtn.disabled = true;
+            addBtn.textContent = 'Menu Paket Habis di Outlet Ini';
+        }
+    } else {
+        if (addBtn) {
+            addBtn.disabled = false;
+        }
+        updateBundleModalPrice();
+    }
+
+    openSheet('bundlingSheet');
+}
+
+// Handle Slot Choice & Customizer Pill Clicks
+const bundleSlotsContainer = document.getElementById('bundleSlotsContainer');
+if (bundleSlotsContainer) {
+    bundleSlotsContainer.addEventListener('click', (e) => {
+        // 1. Pill click inside slot customizer (Ice / Sugar)
+        const pill = e.target.closest('.bundle-pref-pills .og-pill');
+        if (pill) {
+            const container = pill.closest('.bundle-pref-pills');
+            const slot = container.dataset.slot;
+            const cup = container.dataset.cup; // 'cup1', 'cup2', or 'single'
+            const type = container.dataset.type; // 'ice' or 'sugar'
+            const val = pill.dataset.val;
+
+            if (!AppState.bundleSlotPrefs[slot]) AppState.bundleSlotPrefs[slot] = {};
+            if (!AppState.bundleSlotPrefs[slot][cup]) {
+                AppState.bundleSlotPrefs[slot][cup] = { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+            }
+            AppState.bundleSlotPrefs[slot][cup][type] = val;
+
+            container.querySelectorAll('.og-pill').forEach(b => b.classList.remove('active'));
+            pill.classList.add('active');
+            return;
+        }
+
+        // 2. Choice card click
+        const choiceCard = e.target.closest('.bundle-choice-card');
+        if (!choiceCard) return;
+
+        if (choiceCard.classList.contains('sold-out')) {
+            showToast('⚠️ Maaf, menu ini sedang habis atau dinonaktifkan di outlet ini.');
+            return;
+        }
+
+        const slotIdx = choiceCard.dataset.slot;
+        const val = choiceCard.dataset.val;
+        const price = choiceCard.dataset.price ? Number(choiceCard.dataset.price) : null;
+
+        AppState.bundleSlotChoices[slotIdx] = {
+            name: val,
+            price: price
+        };
+
+        const parentSlotBox = choiceCard.closest('.bundle-slot-box');
+        if (parentSlotBox) {
+            parentSlotBox.querySelectorAll('.bundle-choice-card').forEach(c => c.classList.remove('selected'));
+        }
+        choiceCard.classList.add('selected');
+
+        renderBundleSlotCustomizer(slotIdx);
+        updateBundleModalPrice();
+    });
+}
+
+const addBundleToCartBtn = document.getElementById('addBundleToCartBtn');
+if (addBundleToCartBtn) {
+    addBundleToCartBtn.addEventListener('click', () => {
+        if (!AppState.activeBundle) return;
+
+        const slots = AppState.activeBundle.slots || [];
+        const selectedCount = Object.keys(AppState.bundleSlotChoices).length;
+        if (selectedCount < slots.length) {
+            showToast('Silakan pilih semua varian menu paket terlebih dahulu.');
+            return;
+        }
+
+        const choicesParts = [];
+        slots.forEach((slot, sIdx) => {
+            const choice = AppState.bundleSlotChoices[sIdx];
+            if (!choice || !choice.name) return;
+            const optName = choice.name;
+
+            if (isBundlingFoodItem(optName)) {
+                choicesParts.push(optName);
+            } else if (optName.includes('+')) {
+                const cups = optName.split('+').map(c => c.trim());
+                const p1 = AppState.bundleSlotPrefs[sIdx]?.cup1 || { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+                const p2 = AppState.bundleSlotPrefs[sIdx]?.cup2 || { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+                choicesParts.push(`${cups[0]} (${p1.ice}, ${p1.sugar}) + ${cups[1]} (${p2.ice}, ${p2.sugar})`);
+            } else {
+                const p = AppState.bundleSlotPrefs[sIdx]?.single || { ice: 'Normal Ice', sugar: 'Normal Sugar' };
+                choicesParts.push(`${optName} (${p.ice}, ${p.sugar})`);
+            }
+        });
+
+        const choicesList = choicesParts.join(' + ');
+        const notes = document.getElementById('bundleNotes')?.value.trim() || '';
+        const finalPrice = AppState.activeBundle.currentPrice || AppState.activeBundle.price;
+
+        const itemToAdd = {
+            id: 'bundle_' + Date.now(),
+            key: AppState.activeBundle.key,
+            name: AppState.activeBundle.name,
+            price: finalPrice,
+            qty: 1,
+            size: AppState.activeBundle.size || '',
+            variantText: AppState.activeBundle.size || 'Paket Bundling',
+            bundleChoices: choicesList,
+            note: notes,
+            img: AppState.activeBundle.img,
+            subtotal: finalPrice,
+            isBundling: true,
+            category: 'Bundling',
+        };
+
+        closeSheet('bundlingSheet');
+        triggerAddToCartWithFeeCheck(itemToAdd);
+    });
+}
+
+// =========================================================================
+// 5. PRODUCT MODAL, ITEM OPTIONS & ADDONS (Topping & Syrup) (Revisi Poin 8)
+// =========================================================================
+
+function defaultAddons(item) {
+    const target = item || AppState.sheet?.item || AppState.selectedProduct;
+    if (target && (target.isFood || (target.category && target.category.toLowerCase().includes('food')))) {
+        return [];
+    }
+    if (window.INITIAL_DATA && Array.isArray(window.INITIAL_DATA.addons) && window.INITIAL_DATA.addons.length) {
+        return window.INITIAL_DATA.addons;
+    }
+    return [
+        {
+            id: 'topping',
+            name: 'Topping',
+            hint: 'opsional, boleh lebih dari satu',
+            values: [
+                { id: 'espresso_kenangan', text: 'Espresso Shot Kenangan Blend', price: 6000 },
+                { id: 'espresso_juwara', text: 'Espresso Shot Juwara Beans', price: 6000 },
+                { id: 'golden_boba', text: 'Golden Boba', price: 6000 },
+                { id: 'grass_jelly', text: 'Grass Jelly', price: 6000 },
+                { id: 'oreo', text: 'Oreo', price: 6000 },
+                { id: 'whipped_cream_choco', text: 'Whipped Cream Chocolate', price: 6000 },
+                { id: 'whipped_cream_vanilla', text: 'Whipped Cream Vanilla', price: 6000 },
+                { id: 'caramel_crumble', text: 'Caramel Crumble', price: 6000 },
+                { id: 'gula_aren', text: 'Gula Aren', price: 6000 },
+            ]
+        }
+    ];
+}
+
+function staticGroups(item) {
+    const o = item.options || {};
+    const isFood = item.isFood || (item.category && item.category.toLowerCase().includes('food'));
+    const isNoLarge = Boolean(item.noLarge) ||
+        (item.name && item.name.toLowerCase().includes('butterscotch sea salt crumble')) ||
+        (item.key && item.key.toLowerCase().includes('butterscotchseasaltcrumble'));
+
+    const groups = [];
+    let rawSizes = (o.sizes?.length ? o.sizes : (!isFood ? ['Regular', 'Large'] : []));
+    if (isNoLarge) {
+        rawSizes = ['Regular'];
+    }
+    const sizes = rawSizes.filter(s => {
+        if (!s) return false;
+        const low = s.toLowerCase();
+        if (low === 'jumbo' || low.includes('jumbo')) return false;
+        if (isNoLarge && (low === 'large' || low.includes('large'))) return false;
+        return true;
+    });
+    if (sizes.length) {
+        groups.push({ id: 'size', key: 'size', name: 'Ukuran', values: sizes.map((v) => ({ id: v, text: v })), default: sizes[0], impact: true });
+    }
+    const temps = o.temps?.length ? o.temps : (!isFood ? ['Ice', 'Hot'] : []);
+    if (temps.length) {
+        groups.push({ id: 'temp', key: 'temp', name: 'Suhu', values: temps.map((v) => ({ id: v, text: v })), default: temps[0] });
+    }
+    const ices = o.ices?.length ? o.ices : (!isFood ? ['Normal Ice', 'Less Ice', 'No Ice'] : []);
+    if (ices.length) {
+        groups.push({ id: 'ice', key: 'ice', name: 'Level es', values: ices.map((v) => ({ id: v, text: v })), default: ices[0], hideWhen: { temp: 'Hot' } });
+    }
+    const sugars = o.sugars?.length ? o.sugars : (!isFood ? ['Normal Sugar', 'Less Sugar', 'No Sugar'] : []);
+    if (sugars.length) {
+        groups.push({ id: 'sugar', key: 'sugar', name: 'Level gula', values: sugars.map((v) => ({ id: v, text: v })), default: sugars[0] });
+    }
+    return groups;
+}
+
+function restoreSelection(choices = []) {
+    for (const c of choices || []) {
+        const g = AppState.sheet?.groups?.find((x) => x.name === c.group || x.key === c.group);
+        const v = g?.values.find((x) => x.text === c.value || x.id === c.value);
+        if (g && v) AppState.sheet.sel[g.id] = v.id;
+        const a = AppState.sheet?.addons?.find((x) => x.name === c.group || x.id === c.group);
+        const av = a?.values.find((x) => `+${x.text}` === c.value || x.text === c.value || x.id === c.value);
+        if (a && av) AppState.sheet.picked.add(`${a.id}:${av.id}`);
+    }
+}
+
+/** Add-on values the current variant allows (official add-ons depend on the combination). */
+function availableAddons() {
+    const sh = AppState.sheet;
+    if (!sh) return [];
+    const allowed = sh.comboAddons && sh.prices ? new Set(sh.comboAddons[comboKey(sh.sel)] || []) : null;
+    const list = (sh.addons && sh.addons.length) ? sh.addons : defaultAddons(sh.item);
+    return list
+        .map((a) => ({ ...a, values: a.id === 'extras' || !allowed ? a.values : a.values.filter((v) => allowed.has(v.id)) }))
+        .filter((a) => a.values && a.values.length);
+}
+
+function addonTotal() {
+    let t = 0;
+    for (const a of availableAddons()) {
+        for (const v of a.values) {
+            if (AppState.sheet?.picked?.has(`${a.id}:${v.id}`)) t += Number(v.price || 0);
+        }
+    }
+    return t;
+}
+
+const impactGroups = () => (AppState.sheet?.groups || []).filter((g) => g.impact && AppState.sheet?.prices);
+const comboKey = (sel) => impactGroups().map((g) => sel[g.id]).join('|');
+
+/** Price of the chosen variant, without add-ons. */
+function unitPrice(sel = AppState.sheet?.sel) {
+    const sh = AppState.sheet;
+    if (!sh || !sh.item) return 0;
+    const { item, prices } = sh;
+    if (prices) {
+        const key = comboKey(sel);
+        if (prices[key] != null) return prices[key];
+    }
+    const isNoLarge = Boolean(item.noLarge) ||
+        (item.name && item.name.toLowerCase().includes('butterscotch sea salt crumble')) ||
+        (item.key && item.key.toLowerCase().includes('butterscotchseasaltcrumble'));
+
+    const isLarge = !isNoLarge && (sel?.size === 'Large' || sel?.['size'] === 'Large' || Object.values(sel || {}).includes('Large'));
+    if (isLarge) {
+        if (item.largePrice) return item.largePrice;
+        // Fallback if largePrice was not pre-calculated
+        const overrides = adminPricingState?.itemMarkupOverrides || window.INITIAL_DATA?.pricing?.itemMarkupOverrides || {};
+        const largeOverride = overrides[`${item.name} (Large)`];
+        if (largeOverride !== undefined) {
+            const defFee = adminPricingState?.defaultMarkup || 5000;
+            return (item.price || 0) + 3500 + (largeOverride - defFee);
+        }
+    }
+    return item.price;
+}
+
+/** Pre-discount price of the chosen variant (for the strike-through), or null. */
+function normalPrice(sel = AppState.sheet?.sel) {
+    const sh = AppState.sheet;
+    if (!sh || !sh.item) return null;
+    const { item, normals, prices } = sh;
+    if (prices && normals) {
+        const key = comboKey(sel);
+        if (normals[key] != null) return normals[key];
+    }
+    const isNoLarge = Boolean(item.noLarge) ||
+        (item.name && item.name.toLowerCase().includes('butterscotch sea salt crumble')) ||
+        (item.key && item.key.toLowerCase().includes('butterscotchseasaltcrumble'));
+
+    const isLarge = !isNoLarge && (sel?.size === 'Large' || sel?.['size'] === 'Large' || Object.values(sel || {}).includes('Large'));
+    if (isLarge) return item.largeNormal || (item.normalPrice ? item.normalPrice + 6000 : null);
+    return item.normalPrice || null;
+}
+
+function ensureValidCombo(changedGroup) {
+    const sh = AppState.sheet;
+    if (!sh) return;
+    const { prices, sel } = sh;
+    if (!prices || prices[comboKey(sel)] != null) return;
+    // Pick the available combination closest to the current selection
+    const ids = impactGroups().map((g) => g.id);
+    let best = null;
+    let bestScore = -1;
+    for (const k of Object.keys(prices)) {
+        const vals = k.split('|');
+        if (changedGroup && vals[ids.indexOf(changedGroup)] !== sel[changedGroup]) continue;
+        const score = vals.reduce((a, v, i) => a + (sel[ids[i]] === v ? 1 : 0), 0);
+        if (score > bestScore) [best, bestScore] = [vals, score];
+    }
+    if (best) ids.forEach((id, i) => (sel[id] = best[i]));
+}
+
+function selectOption(gid, vid) {
+    if (!AppState.sheet) return;
+    AppState.sheet.sel[gid] = vid;
+    ensureValidCombo(gid);
+    renderOptions();
+}
+
+function isHidden(g, sel) {
+    return Object.entries(g.hideWhen || {}).some(([gid, vid]) => sel[gid] === vid);
+}
+
+const GROUP_LABELS = {
+    Temperature: 'Suhu',
+    Size: 'Ukuran',
+    Beans: 'Biji kopi',
+    'Milk Option': 'Susu',
+    'Sugar Level': 'Level gula',
+    'Ice Level': 'Level es'
+};
+
+function renderOptions() {
+    const sh = AppState.sheet;
+    if (!sh || !sh.item) return;
+
+    const base = unitPrice();
+    const html = (sh.groups || [])
+        .filter((g) => !isHidden(g, sh.sel))
+        .map((g) => {
+            const ref = g.impact ? unitPrice({ ...sh.sel, [g.id]: g.default }) : null;
+            const pills = g.values.map((v) => {
+                let extra = '';
+                let disabled = false;
+                if (g.impact) {
+                    const p = unitPrice({ ...sh.sel, [g.id]: v.id });
+                    if (sh.prices && p == null) {
+                        disabled = !Object.keys(sh.prices).some((k) => k.split('|')[impactGroups().findIndex((x) => x.id === g.id)] === v.id);
+                    } else if (ref != null && p != null && p > ref) {
+                        extra = ` <small>+${formatRp(p - ref)}</small>`;
+                    }
+                }
+                return `<button type="button" class="opt-pill ${sh.sel[g.id] === v.id ? 'active' : ''}" data-g="${esc(g.id)}" data-v="${esc(v.id)}" aria-pressed="${sh.sel[g.id] === v.id}" ${disabled ? 'disabled' : ''}>${esc(v.text)}${extra}</button>`;
+            });
+            return `<div class="opt-group" role="group" aria-label="${esc(GROUP_LABELS[g.name] || g.name)}"><div class="opt-title">${esc(GROUP_LABELS[g.name] || g.name)}</div><div class="opt-choices">${pills.join('')}</div></div>`;
+        })
+        .join('');
+
+    const addonHtml = availableAddons()
+        .map(
+            (a) => `<div class="opt-group" role="group" aria-label="${esc(a.name)}"><div class="opt-title">${esc(a.name)} <span class="opt-hint">opsional, boleh lebih dari satu</span></div><div class="opt-choices">${a.values
+                .map((v) => {
+                    const on = sh.picked.has(`${a.id}:${v.id}`);
+                    return `<button type="button" class="opt-pill addon ${on ? 'active' : ''}" data-addon="${esc(`${a.id}:${v.id}`)}" aria-pressed="${on}">${esc(v.text)}<small>+${formatRp(v.price)}</small></button>`;
+                })
+                .join('')}</div></div>`,
+        )
+        .join('');
+
+    const itemOptionsEl = document.getElementById('itemOptions');
+    if (itemOptionsEl) {
+        itemOptionsEl.innerHTML = html + addonHtml + (sh.loading ? `<div class="opt-loading"><span class="spinner"></span> Cek varian & stok di outlet…</div>` : '');
+    }
+
+    const extra = addonTotal();
+    const price = (base ?? sh.item.price) + extra;
+    const normal = normalPrice();
+
+    const priceEl = document.getElementById('modalProductPrice');
+    const normalPriceEl = document.getElementById('modalProductNormalPrice');
+    const addToCartBtn = document.getElementById('addToCartBtn');
+
+    if (priceEl) priceEl.textContent = formatRp(price);
+    if (normalPriceEl) {
+        normalPriceEl.textContent = normal && normal > (base ?? 0) ? formatRp(normal + extra) : '';
+    }
+
+    if (addToCartBtn) {
+        addToCartBtn.innerHTML = `<span>Tambahkan ke Keranjang • ${formatRp(price * sh.qty)}</span>`;
+        addToCartBtn.disabled = base == null;
+    }
+}
+
+async function loadItemDetail(item, line) {
+    const sheet = AppState.sheet;
+    if (!sheet) return;
+    sheet.loading = true;
+    renderOptions();
+    try {
+        const outletCode = AppState.outlet?.code || 'LA.CODEFIN';
+        const itemCode = item.code || '';
+        const itemKey = item.key || item.id || '';
+        const res = await fetch(`api/kopken/item?outlet=${encodeURIComponent(outletCode)}&code=${encodeURIComponent(itemCode)}&key=${encodeURIComponent(itemKey)}&_t=${Date.now()}`, { cache: 'no-store' });
+        const d = await res.json();
+        if (AppState.sheet !== sheet) return;
+        if (d.isSoldOut) {
+            closeSheet('productSheet');
+            item.isSoldOut = true;
+            showToast(`Maaf, ${item.name} sedang habis di outlet ini.`);
+            return;
+        }
+        if (d.groups?.length && d.prices && Object.keys(d.prices).length) {
+            const isNoLarge = Boolean(item.noLarge) ||
+                (item.name && item.name.toLowerCase().includes('butterscotch sea salt crumble')) ||
+                (item.key && item.key.toLowerCase().includes('butterscotchseasaltcrumble'));
+
+            // Filter out 'Jumbo' (and 'Large' for regular-only items) from groups
+            sheet.groups = d.groups.map(g => {
+                const gKey = (g.key || '').toLowerCase();
+                const gName = (g.name || '').toLowerCase();
+                if (gKey === 'size' || gName === 'size' || gName === 'ukuran') {
+                    return {
+                        ...g,
+                        values: (g.values || []).filter(v => {
+                            const t = (v.text || '').toLowerCase();
+                            const vId = (v.id || '').toLowerCase();
+                            if (t === 'jumbo' || vId === 'jumbo' || t.includes('jumbo')) return false;
+                            if (isNoLarge && (t === 'large' || vId === 'large' || t.includes('large'))) return false;
+                            return true;
+                        })
+                    };
+                }
+                return g;
+            });
+            sheet.prices = d.prices;
+            sheet.normals = d.normals || null;
+            sheet.sel = {};
+            for (const g of sheet.groups) sheet.sel[g.id] = g.default;
+            sheet.addons = [...(d.addons || [])];
+            sheet.comboAddons = d.comboAddons && Object.keys(d.comboAddons).length ? d.comboAddons : null;
+            sheet.picked = new Set();
+            if (line) restoreSelection(line.choices);
+            ensureValidCombo();
+        } else if (d.addons && Array.isArray(d.addons) && d.addons.length) {
+            sheet.addons = d.addons;
+        }
+        if (d.desc && !item.desc) {
+            const descEl = document.getElementById('modalProductDesc');
+            if (descEl) descEl.textContent = d.desc;
+        }
+    } catch (err) {
+        console.warn('loadItemDetail error:', err);
+    } finally {
+        if (AppState.sheet === sheet) {
+            sheet.loading = false;
+            renderOptions();
+        }
+    }
+}
+
+function currentChoices(groups, sel) {
+    return (groups || []).filter((g) => !isHidden(g, sel)).map((g) => ({
+        group: g.name,
+        value: g.values.find((v) => v.id === sel[g.id])?.text || ''
+    }));
+}
+
+function pickedChoices() {
+    const out = [];
+    for (const a of availableAddons()) {
+        for (const v of a.values) {
+            if (AppState.sheet?.picked?.has(`${a.id}:${v.id}`)) {
+                out.push({
+                    id: `${a.id}:${v.id}`,
+                    group: a.name,
+                    name: v.text,
+                    value: `+${v.text}`,
+                    price: Number(v.price || 0)
+                });
+            }
+        }
+    }
+    return out;
+}
+
+function optionText(opts) {
+    if (!opts) return '';
+    if (Array.isArray(opts)) {
+        return opts
+            .map((c) => (typeof c === 'string' ? c : c && (c.value || c.text || c.name)))
+            .filter(Boolean)
+            .join(' • ');
+    }
+    const parts = [];
+    if (opts.temp) parts.push(opts.temp);
+    if (opts.size) parts.push(opts.size);
+    if (opts.ice && opts.temp !== 'Hot') parts.push(opts.ice);
+    if (opts.sugar) parts.push(opts.sugar);
+    return parts.join(' • ');
+}
+
+function openProductModal(item, editIndex = null) {
+    if (isOutletClosed()) {
+        showToast(`⚠️ Outlet ${AppState.outlet?.name || ''} sedang tutup.`);
+        openSheet('outletSheet');
+        return;
+    }
+    AppState.selectedProduct = item;
+    AppState.selectedQty = 1;
+
+    const staticG = staticGroups(item);
+    AppState.sheet = {
+        item,
+        groups: staticG,
+        prices: null,
+        normals: null,
+        sel: {},
+        qty: 1,
+        editIndex,
+        loading: false,
+        addons: defaultAddons(item),
+        comboAddons: null,
+        picked: new Set(),
+    };
+    for (const g of AppState.sheet.groups) {
+        AppState.sheet.sel[g.id] = g.default;
+    }
+
+    const nameEl = document.getElementById('modalProductName');
+    const catEl = document.getElementById('modalProductCat');
+    const descEl = document.getElementById('modalProductDesc');
+    const imgEl = document.getElementById('modalProductImg');
+    const noteEl = document.getElementById('modalItemNote');
+    const qtyValEl = document.getElementById('qtyVal');
+
+    if (nameEl) nameEl.textContent = item.name;
+    if (catEl) catEl.textContent = item.category || 'Coffee';
+    if (descEl) descEl.textContent = item.desc || '';
+    if (imgEl) imgEl.src = item.img || 'https://cdn.kopikenangan.com/public/da484154-47b1-a756-54a4-8b3490fb0eae';
+    if (noteEl) noteEl.value = '';
+    if (qtyValEl) qtyValEl.textContent = '1';
+
+    renderOptions();
+    openSheet('productSheet');
+
+    // Live variants, prices & addons straight from outlet
+    if (item.code && AppState.outlet?.code) {
+        loadItemDetail(item);
+    }
+}
+
+// Event delegation on #itemOptions matching client spec
+$('#itemOptions')?.addEventListener('click', (e) => {
+    const b = e.target.closest('.opt-pill');
+    if (!b || b.disabled) return;
+    if (b.dataset.addon) {
+        const k = b.dataset.addon;
+        const S = AppState;
+        if (S.sheet.picked.has(k)) S.sheet.picked.delete(k);
+        else S.sheet.picked.add(k);
+        renderOptions();
+    } else if (b.dataset.g && b.dataset.v) {
+        selectOption(b.dataset.g, b.dataset.v);
+    }
+});
+
+// Stepper
+const qtyMinus = document.getElementById('qtyMinus');
+const qtyPlus = document.getElementById('qtyPlus');
+const qtyVal = document.getElementById('qtyVal');
+
+if (qtyMinus && qtyPlus && qtyVal) {
+    qtyMinus.addEventListener('click', () => {
+        if (AppState.sheet && AppState.sheet.qty > 1) {
+            AppState.sheet.qty--;
+            AppState.selectedQty = AppState.sheet.qty;
+            qtyVal.textContent = AppState.sheet.qty;
+            renderOptions();
+        }
+    });
+
+    qtyPlus.addEventListener('click', () => {
+        if (AppState.sheet) {
+            AppState.sheet.qty = Math.min(20, (AppState.sheet.qty || 1) + 1);
+            AppState.selectedQty = AppState.sheet.qty;
+            qtyVal.textContent = AppState.sheet.qty;
+            renderOptions();
+        }
+    });
+}
+
+// Add Single Item to Cart
+const addToCartBtn = document.getElementById('addToCartBtn');
+if (addToCartBtn) {
+    addToCartBtn.addEventListener('click', () => {
+        const sh = AppState.sheet;
+        if (!sh || !sh.item) return;
+
+        const variant = unitPrice();
+        if (variant == null) return;
+        const addonsTotal = addonTotal();
+        const finalPrice = variant + addonsTotal;
+        const note = document.getElementById('modalItemNote')?.value.trim() || '';
+        const choices = currentChoices(sh.groups, sh.sel);
+        const pickedAddons = pickedChoices();
+        const allChoices = [...choices, ...pickedAddons];
+
+        const sizeVal = choices.find(c => c.group.toLowerCase().includes('size') || c.group.toLowerCase().includes('ukuran'))?.value || 'Regular';
+        const tempVal = choices.find(c => c.group.toLowerCase().includes('temp') || c.group.toLowerCase().includes('suhu'))?.value || 'Ice';
+        const iceVal = choices.find(c => c.group.toLowerCase().includes('ice') || c.group.toLowerCase().includes('es'))?.value || '';
+        const sugarVal = choices.find(c => c.group.toLowerCase().includes('sugar') || c.group.toLowerCase().includes('gula'))?.value || '';
+
+        const itemToAdd = {
+            id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            key: sh.item.key || sh.item.id,
+            name: sh.item.name,
+            price: finalPrice,
+            basePrice: variant,
+            qty: sh.qty,
+            size: sizeVal,
+            temp: tempVal,
+            ice: iceVal,
+            sugar: sugarVal,
+            choices: allChoices,
+            variantText: optionText(choices),
+            optionsText: optionText(allChoices),
+            addons: pickedAddons,
+            addonsTotal: addonsTotal,
+            note: note,
+            img: sh.item.img,
+            subtotal: finalPrice * sh.qty,
+        };
+
+        closeSheet('productSheet');
+        triggerAddToCartWithFeeCheck(itemToAdd);
+    });
+}
+
+/**
+ * 1 PCS FEE CHECK CONTROLLER (Revisi Poin 8)
+ * Jika jumlah item di keranjang sebelum tambah adalah 0 dan item yang ditambah qty = 1,
+ * tampilkan popup "Ada Fee Tambahan +2.000" sebelum masuk ke keranjang!
+ */
+function triggerAddToCartWithFeeCheck(item) {
+    // 1. Cek Jam Operasional Web Kedai Kyuti
+    const whStatus = checkWebHoursStatusNow();
+    if (!whStatus.isOpen) {
+        showToast(`⚠️ Maaf, Kedai Kyuti sedang di luar jam operasional.`);
+        openWebClosedModal();
+        return;
+    }
+
+    if (isOutletClosed()) {
+        showToast(`⚠️ Maaf, tidak dapat menambah menu karena outlet sedang tutup.`);
+        openSheet('outletSheet');
+        return;
+    }
+
+    // Bundling packages are exempt from single-item fee (+2.000) and warning modal
+    if (item.isBundling || item.category === 'Bundling') {
+        commitItemToCart(item);
+        return;
+    }
+
+    const currentTotalQty = AppState.cart.reduce((sum, i) => sum + (i.qty || 1), 0);
+
+    // If current cart is empty, this single item has qty 1, and single item fee is enabled (>0), show Fee Warning Modal
+    if (currentTotalQty === 0 && item.qty === 1 && (AppState.singleItemFeeAmount || 0) > 0) {
+        AppState.pendingCartItem = item;
+        openSheet('singleItemFeeModal');
+        return;
+    }
+
+    // Otherwise, directly push to cart
+    commitItemToCart(item);
+}
+
+// Modal Fee 1pcs Buttons
+const feeContinueBtn = document.getElementById('feeContinueBtn');
+if (feeContinueBtn) {
+    feeContinueBtn.addEventListener('click', () => {
+        closeSheet('singleItemFeeModal');
+        if (AppState.pendingCartItem) {
+            commitItemToCart(AppState.pendingCartItem);
+            AppState.pendingCartItem = null;
+            showToast('✓ Pesanan satuan dimasukkan ke keranjang');
+        }
+    });
+}
+
+const feeAddMoreBtn = document.getElementById('feeAddMoreBtn');
+if (feeAddMoreBtn) {
+    feeAddMoreBtn.addEventListener('click', () => {
+        closeSheet('singleItemFeeModal');
+        if (AppState.pendingCartItem) {
+            commitItemToCart(AppState.pendingCartItem);
+            AppState.pendingCartItem = null;
+            showToast('Yuk pilih 1 item lagi agar bebas fee! ♡');
+        }
+    });
+}
+
+function commitItemToCart(item) {
+    AppState.cart.push(item);
+    localStorage.setItem('kyuti_cart', JSON.stringify(AppState.cart));
+    updateCartUI();
+    showToast(`✓ Ditambahkan: ${item.name}`);
+}
+
+// =========================================================================
+// 6. CART MANAGEMENT, PLASTIC BAG (+1.000) & PICKUP TIME (Revisi Poin 10 & 11)
+// =========================================================================
+
+function updateCartUI() {
+    const totalQty = AppState.cart.reduce((sum, i) => sum + (i.qty || 1), 0);
+    const subtotal = AppState.cart.reduce((sum, i) => sum + (i.subtotal || ((i.price || 0) * (i.qty || 1))), 0);
+
+    // Calculate Single Item Fee (only if single item fee > 0 and total qty == 1, exempt if cart contains bundling)
+    const hasBundling = AppState.cart.some(i => i.isBundling || i.category === 'Bundling');
+    const hasSingleFee = (totalQty === 1) && !hasBundling && ((AppState.singleItemFeeAmount || 0) > 0);
+    const singleFee = hasSingleFee ? AppState.singleItemFeeAmount : 0;
+
+    // Calculate Plastic Bag Fee (Qty * Fee per bag)
+    const plasticBagQty = AppState.hasPlasticBag ? Math.max(1, AppState.plasticBagQty || 1) : 0;
+    const plasticFee = plasticBagQty * AppState.plasticBagFeeAmount;
+
+    const grandTotal = subtotal + singleFee + plasticFee;
+
+    // Update Floating Cart Bar
+    const floatingCart = document.getElementById('floatingCart');
+    const cartTotalQty = document.getElementById('cartTotalQty');
+    const cartBarTitle = document.getElementById('cartBarTitle');
+    const cartBarTotalPrice = document.getElementById('cartBarTotalPrice');
+
+    if (floatingCart) {
+        if (totalQty > 0) {
+            floatingCart.classList.add('visible');
+            if (cartTotalQty) cartTotalQty.textContent = totalQty;
+            if (cartBarTitle) cartBarTitle.textContent = `${totalQty} Item di Keranjang`;
+            if (cartBarTotalPrice) cartBarTotalPrice.textContent = formatRp(grandTotal);
+        } else {
+            floatingCart.classList.remove('visible');
+        }
+    }
+
+    // Update Cart Sheet Summary
+    const subtotalEl = document.getElementById('summarySubtotal');
+    const totalEl = document.getElementById('summaryTotal');
+    const singleFeeRow = document.getElementById('singleFeeRow');
+    const summarySingleFee = document.getElementById('summarySingleFee');
+    const freeFeeRow = document.getElementById('freeFeeRow');
+    const plasticFeeRow = document.getElementById('plasticFeeRow');
+
+    if (subtotalEl) subtotalEl.textContent = formatRp(subtotal);
+    if (totalEl) totalEl.textContent = formatRp(grandTotal);
+
+    // Fee Pesanan Satuan: Tampilkan hanya jika admin mengaktifkan singleItemFeeAmount > 0
+    if (singleFeeRow) {
+        const showSingleFeeRow = (AppState.singleItemFeeAmount || 0) > 0 && totalQty > 0;
+        singleFeeRow.style.display = showSingleFeeRow ? 'flex' : 'none';
+        if (summarySingleFee) {
+            if (hasSingleFee) {
+                summarySingleFee.textContent = `+${formatRp(AppState.singleItemFeeAmount)}`;
+                summarySingleFee.style.color = 'var(--brand-accent)';
+            } else {
+                summarySingleFee.textContent = '0';
+                summarySingleFee.style.color = 'var(--text-muted)';
+            }
+        }
+    }
+    if (freeFeeRow) freeFeeRow.style.display = 'none';
+
+    if (plasticFeeRow) {
+        plasticFeeRow.style.display = AppState.hasPlasticBag ? 'flex' : 'none';
+        const summaryPlasticFee = document.getElementById('summaryPlasticFee');
+        if (summaryPlasticFee) {
+            summaryPlasticFee.textContent = `+${formatRp(plasticFee)}`;
+        }
+        const summaryPlasticLabel = document.getElementById('summaryPlasticLabel');
+        if (summaryPlasticLabel) {
+            summaryPlasticLabel.textContent = plasticBagQty > 1 ? `Kantung Belanja Plastik (${plasticBagQty} pcs)` : `Kantung Belanja Plastik`;
+        }
+    }
+
+    // Update Plastic Bag UI controls & hints
+    updatePlasticBagUI();
+
+    // Update Checkout Button if Web Closed or Outlet Closed
+    const checkoutWaBtn = document.getElementById('checkoutWaBtn');
+    if (checkoutWaBtn) {
+        const whStatus = checkWebHoursStatusNow();
+        if (!whStatus.isOpen) {
+            checkoutWaBtn.disabled = false;
+            checkoutWaBtn.style.opacity = '0.95';
+            checkoutWaBtn.style.background = '#E11D48';
+            checkoutWaBtn.innerHTML = `<span>⚠️ Toko Tutup (Buka ${whStatus.open} - ${whStatus.close} WIB)</span>`;
+        } else if (isOutletClosed()) {
+            checkoutWaBtn.disabled = true;
+            checkoutWaBtn.style.opacity = '0.7';
+            checkoutWaBtn.style.background = '';
+            checkoutWaBtn.innerHTML = `<span>⚠️ Outlet Sedang Tutup (Ganti Outlet)</span>`;
+        } else {
+            checkoutWaBtn.disabled = false;
+            checkoutWaBtn.style.opacity = '1';
+            checkoutWaBtn.style.background = '';
+            checkoutWaBtn.innerHTML = `
+                <span>Kirim Pesanan ke WhatsApp</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            `;
+        }
+    }
+
+    renderCartItemsList();
+}
+
+function renderCartItemsList() {
+    const list = document.getElementById('cartItemsList');
+    if (!list) return;
+
+    if (!AppState.cart.length) {
+        list.innerHTML = `
+            <div class="empty-box" style="padding:20px 0">
+                <div class="empty-icon">🛒</div>
+                <p>Keranjang kamu masih kosong.</p>
+            </div>
+        `;
+        return;
+    }
+
+    list.innerHTML = AppState.cart.map((item, idx) => `
+        <div style="display:flex;align-items:center;gap:12px;background:var(--bg-page);border-radius:var(--radius-md);padding:10px 12px;border:1px solid var(--border-color)">
+            <img src="${item.img || 'https://placehold.co/80x80'}" style="width:48px;height:48px;border-radius:8px;object-fit:cover;">
+            <div style="flex:1;overflow:hidden">
+                <div style="font-size:13px;font-weight:800;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${item.variantText || `${item.size ? item.size + ' • ' : ''}${item.temp || 'Ice'}${item.sugar ? ' • ' + item.sugar : ''}`}</div>
+                ${item.bundleChoices ? `<div style="font-size:10px;color:var(--brand-primary-dark);font-weight:700">${item.bundleChoices}</div>` : ''}
+                ${item.addons && item.addons.length ? `<div style="font-size:10px;color:var(--brand-primary-dark);font-weight:700;margin-top:2px">+ ${item.addons.map(a => `${a.name || a.text || a.value} (+${formatRp(a.price)})`).join(', ')}</div>` : ''}
+                ${item.note ? `<div style="font-size:10px;color:var(--text-muted);font-style:italic">"${item.note}"</div>` : ''}
+                <div style="font-size:12px;font-weight:800;color:var(--brand-primary-dark);margin-top:2px">${formatRp(item.price)} x ${item.qty}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+                <button class="icon-btn" onclick="modifyCartQty(${idx}, -1)" style="width:28px;height:28px">-</button>
+                <b style="font-size:13px;min-width:16px;text-align:center">${item.qty}</b>
+                <button class="icon-btn" onclick="modifyCartQty(${idx}, 1)" style="width:28px;height:28px">+</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+window.modifyCartQty = function(idx, change) {
+    if (!AppState.cart[idx]) return;
+    AppState.cart[idx].qty += change;
+    if (AppState.cart[idx].qty <= 0) {
+        AppState.cart.splice(idx, 1);
+    } else {
+        AppState.cart[idx].subtotal = AppState.cart[idx].price * AppState.cart[idx].qty;
+    }
+    localStorage.setItem('kyuti_cart', JSON.stringify(AppState.cart));
+    updateCartUI();
+};
+
+const floatingCart = document.getElementById('floatingCart');
+if (floatingCart) {
+    floatingCart.addEventListener('click', () => {
+        updateCartUI();
+        openSheet('cartSheet');
+    });
+}
+
+const clearCartBtn = document.getElementById('clearCartBtn');
+if (clearCartBtn) {
+    clearCartBtn.addEventListener('click', () => {
+        if (confirm('Kosongkan keranjang belanja?')) {
+            AppState.cart = [];
+            AppState.hasPlasticBag = false;
+            AppState.plasticBagQty = 1;
+            localStorage.removeItem('kyuti_cart');
+            updatePlasticBagUI();
+            updateCartUI();
+            showToast('Keranjang telah dikosongkan.');
+        }
+    });
+}
+
+function updatePlasticBagUI() {
+    const checkbox = document.getElementById('plasticBagCheckbox');
+    const stepper = document.getElementById('plasticBagStepper');
+    const hint = document.getElementById('plasticBagHint');
+    const box = document.getElementById('plasticBagAddonBox');
+    const qtyDisplay = document.getElementById('plasticBagQtyDisplay');
+    const hintText = document.getElementById('plasticBagHintText');
+
+    const isChecked = !!AppState.hasPlasticBag;
+    if (checkbox) checkbox.checked = isChecked;
+    if (stepper) stepper.style.display = isChecked ? 'flex' : 'none';
+    if (hint) hint.style.display = isChecked ? 'flex' : 'none';
+    if (box) box.classList.toggle('active', isChecked);
+    if (qtyDisplay) qtyDisplay.textContent = AppState.plasticBagQty || 1;
+
+    if (hintText && isChecked) {
+        const qty = AppState.plasticBagQty || 1;
+        const totalItems = AppState.cart.reduce((sum, i) => sum + (i.qty || 1), 0);
+        const cost = qty * (AppState.plasticBagFeeAmount || 1000);
+        if (totalItems >= 4 && qty === 1) {
+            hintText.innerHTML = `🛍️ 1 Kantung (+${formatRp(cost)}). <span style="color:var(--brand-primary-dark);font-weight:700">Ada ${totalItems} item, bisa tambah kantung jika perlu.</span>`;
+        } else {
+            hintText.innerHTML = `🛍️ Total <b>${qty} Kantung Belanja</b> (+${formatRp(cost)})`;
+        }
+    }
+}
+
+// Plastic Bag Addon Event Listeners (Revisi: Jumlah Bisa Diatur)
+const plasticBagCheckbox = document.getElementById('plasticBagCheckbox');
+if (plasticBagCheckbox) {
+    plasticBagCheckbox.addEventListener('change', (e) => {
+        AppState.hasPlasticBag = e.target.checked;
+        if (AppState.hasPlasticBag) {
+            if (!AppState.plasticBagQty || AppState.plasticBagQty < 1) {
+                AppState.plasticBagQty = 1;
+            }
+        }
+        updatePlasticBagUI();
+        updateCartUI();
+    });
+}
+
+const plasticBagMinusBtn = document.getElementById('plasticBagMinusBtn');
+if (plasticBagMinusBtn) {
+    plasticBagMinusBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (AppState.plasticBagQty > 1) {
+            AppState.plasticBagQty--;
+        } else {
+            AppState.hasPlasticBag = false;
+            AppState.plasticBagQty = 1;
+        }
+        updatePlasticBagUI();
+        updateCartUI();
+    });
+}
+
+const plasticBagPlusBtn = document.getElementById('plasticBagPlusBtn');
+if (plasticBagPlusBtn) {
+    plasticBagPlusBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        AppState.hasPlasticBag = true;
+        AppState.plasticBagQty = Math.min(50, (AppState.plasticBagQty || 1) + 1);
+        updatePlasticBagUI();
+        updateCartUI();
+    });
+}
+
+// Pickup Time & Timezone Handling (Revisi Poin 11: 15-Minute Intervals)
+const pickupNowBtn = document.getElementById('pickupNowBtn');
+const pickupCustomBtn = document.getElementById('pickupCustomBtn');
+const customPickupContainer = document.getElementById('customPickupContainer');
+const pickupTimeSelect = document.getElementById('pickupTimeSelect');
+
+function getCurrentTimeInTz(tz) {
+    const tzMap = {
+        'WIB': 'Asia/Jakarta',
+        'WITA': 'Asia/Makassar',
+        'WIT': 'Asia/Jayapura'
+    };
+    const timeZone = tzMap[tz] || 'Asia/Jakarta';
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: false
+        }).formatToParts(new Date());
+
+        let h = 0, m = 0;
+        for (const p of parts) {
+            if (p.type === 'hour') h = parseInt(p.value, 10);
+            if (p.type === 'minute') m = parseInt(p.value, 10);
+        }
+        return { hour: h, minute: m };
+    } catch {
+        const now = new Date();
+        return { hour: now.getHours(), minute: now.getMinutes() };
+    }
+}
+
+function populate15MinPickupTimes() {
+    if (!pickupTimeSelect) return;
+    pickupTimeSelect.innerHTML = '';
+
+    const tz = AppState.pickupTimezone || 'WIB';
+    const { hour: curH, minute: curM } = getCurrentTimeInTz(tz);
+
+    // Buffer ~15 min from current time, then round UP to the next 15-minute mark
+    // E.g. at 19:28 -> 19:28 + 15 = 19:43 -> rounded up to 19:45!
+    let totalTargetMin = curH * 60 + curM + 15;
+    let roundedMin = Math.ceil(totalTargetMin / 15) * 15;
+    let startH = Math.floor(roundedMin / 60);
+    let startM = roundedMin % 60;
+
+    // Minimum operating start hour is 07:00
+    if (startH < 7) {
+        startH = 7;
+        startM = 0;
+    }
+
+    let addedCount = 0;
+    // Generate times up to 23:45
+    for (let h = startH; h <= 23; h++) {
+        const firstM = (h === startH) ? startM : 0;
+        for (let m = firstM; m < 60; m += 15) {
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            const timeStr = `${hh}.${mm} ${tz}`;
+            const opt = document.createElement('option');
+            opt.value = timeStr;
+            opt.textContent = timeStr;
+            pickupTimeSelect.appendChild(opt);
+            addedCount++;
+        }
+    }
+
+    // If outlet is about to close (after 23:45 or late night), provide next day option
+    if (addedCount === 0) {
+        const opt = document.createElement('option');
+        opt.value = `Besok 07.00 ${tz}`;
+        opt.textContent = `Besok 07.00 ${tz} (Outlet Mendekati Jam Tutup)`;
+        pickupTimeSelect.appendChild(opt);
+    }
+
+    AppState.pickupTime = pickupTimeSelect.value;
+}
+
+if (pickupNowBtn && pickupCustomBtn && customPickupContainer) {
+    pickupNowBtn.addEventListener('click', () => {
+        pickupNowBtn.classList.add('active');
+        pickupCustomBtn.classList.remove('active');
+        customPickupContainer.style.display = 'none';
+        AppState.pickupType = 'Sekarang';
+    });
+
+    pickupCustomBtn.addEventListener('click', () => {
+        pickupCustomBtn.classList.add('active');
+        pickupNowBtn.classList.remove('active');
+        customPickupContainer.style.display = 'block';
+        AppState.pickupType = 'Atur Jam';
+        populate15MinPickupTimes();
+    });
+}
+
+// Timezone Pills
+document.querySelectorAll('.tz-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tz-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        AppState.pickupTimezone = btn.dataset.tz;
+        populate15MinPickupTimes();
+    });
+});
+
+// =========================================================================
+// 7. CHECKOUT VIA WHATSAPP & CLIENT ORDER ENGINE (Revisi Poin 8, 10, 11)
+// =========================================================================
+
+function normalizeWaPhone(phone) {
+    if (!phone) return '628972276154';
+    let clean = String(phone).replace(/\D/g, '');
+    if (clean.startsWith('0')) {
+        clean = '62' + clean.slice(1);
+    }
+    return clean || '628972276154';
+}
+
+function copyToClipboard(text, onSuccess) {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            if (typeof onSuccess === 'function') onSuccess();
+        }).catch(() => {
+            fallbackCopy(text, onSuccess);
+        });
+    } else {
+        fallbackCopy(text, onSuccess);
+    }
+}
+
+function fallbackCopy(text, onSuccess) {
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-999999px';
+        ta.style.top = '-999999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (typeof onSuccess === 'function') onSuccess();
+    } catch (err) {
+        console.error('Fallback copy error:', err);
+    }
+}
+
+function generateClientOrder({ custName, custPhone, notes, pickupTime }) {
+    const prefix = window.INITIAL_DATA?.orderPrefix || 'KYUTI';
+    const randPart = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const orderCode = `${prefix}-${randPart}`;
+
+    const totalQty = AppState.cart.reduce((sum, i) => sum + (i.qty || 1), 0);
+    const subtotal = AppState.cart.reduce((sum, i) => sum + (i.subtotal || ((i.price || 0) * (i.qty || 1))), 0);
+    const hasBundling = AppState.cart.some(i => i.isBundling || i.category === 'Bundling');
+    const hasSingleFee = (totalQty === 1) && !hasBundling && ((AppState.singleItemFeeAmount || 0) > 0);
+    const singleFee = hasSingleFee ? (AppState.singleItemFeeAmount || 0) : 0;
+    const singleItemFee = singleFee;
+    const plasticBagQty = AppState.hasPlasticBag ? Math.max(1, AppState.plasticBagQty || 1) : 0;
+    const plasticFee = plasticBagQty * (AppState.plasticBagFeeAmount || 1000);
+    const grandTotal = subtotal + singleFee + plasticFee;
+
+    let fullPickup = pickupTime || 'Sekarang';
+    if (fullPickup !== 'Sekarang' && !fullPickup.includes(AppState.pickupTimezone)) {
+        fullPickup += ` ${AppState.pickupTimezone}`;
+    }
+
+    const outletName = AppState.outlet?.name || 'Kopi Kenangan';
+    const outletCode = AppState.outlet?.code || 'LA.CODEFIN';
+
+    // Format WhatsApp message
+    let msg = `୨୧ *FORMAT ORDER KEDAI KYUTI* ୨୧\n`;
+    msg += `--------------------------------------\n`;
+    msg += `Kode Pesanan: *${orderCode}*\n`;
+    msg += `Outlet: *${outletName}*\n`;
+    msg += `Nama: *${custName}*\n`;
+    if (custPhone) {
+        msg += `No. HP: ${custPhone}\n`;
+    }
+    msg += `Waktu Pickup: *${fullPickup}*\n`;
+    msg += `--------------------------------------\n`;
+    msg += `*Detail Menu:*\n`;
+
+    AppState.cart.forEach((item, idx) => {
+        const isBundling = !!item.isBundling || item.category === 'Bundling';
+        let optStr = '';
+        if (!isBundling) {
+            const options = [];
+            if (item.size) options.push(item.size);
+            if (item.temp) options.push(item.temp);
+            if (item.ice) options.push(item.ice);
+            if (item.sugar) options.push(item.sugar);
+            if (options.length) optStr = ` (${options.join(', ')})`;
+        }
+
+        const itemQty = item.qty || 1;
+        const itemPrice = item.price || 0;
+        const itemSubtotal = item.subtotal || (itemPrice * itemQty);
+
+        msg += `${idx + 1}. *${item.name || 'Item'}* x${itemQty}${optStr}\n`;
+        if (item.bundleChoices) {
+            msg += `    Isi Paket: _${item.bundleChoices}_\n`;
+        }
+        if (item.addons && Array.isArray(item.addons) && item.addons.length) {
+            const addonStrings = item.addons.map(a => `${a.name || a.text || 'Addon'} (+Rp ${Number(a.price || 0).toLocaleString('id-ID')})`);
+            msg += `    + Topping: _${addonStrings.join(', ')}_\n`;
+        }
+        msg += `    Harga: Rp ${Number(itemPrice).toLocaleString('id-ID')} | Subtotal: Rp ${Number(itemSubtotal).toLocaleString('id-ID')}\n`;
+        if (item.note) {
+            msg += `    Catatan: _${item.note}_\n`;
+        }
+    });
+
+    msg += `--------------------------------------\n`;
+    msg += `Subtotal Menu: Rp ${Number(subtotal).toLocaleString('id-ID')}\n`;
+
+    if (hasSingleFee && singleFee > 0) {
+        msg += `Fee Pesanan Satuan: +Rp ${Number(singleFee).toLocaleString('id-ID')}\n`;
+    } else if ((AppState.singleItemFeeAmount || 0) > 0) {
+        msg += `Fee Pesanan Satuan: 0\n`;
+    }
+
+    if (AppState.hasPlasticBag && plasticBagQty > 0) {
+        const bagLabel = plasticBagQty > 1 ? `Kantung Belanja Plastik (${plasticBagQty} pcs)` : `Kantung Belanja Plastik`;
+        msg += `${bagLabel}: +Rp ${Number(plasticFee).toLocaleString('id-ID')}\n`;
+    }
+
+    if (notes) {
+        msg += `Catatan Tambahan: _${notes}_\n`;
+    }
+    msg += `--------------------------------------\n`;
+    msg += `*TOTAL BAYAR: Rp ${Number(grandTotal).toLocaleString('id-ID')}*\n\n`;
+    msg += `𝒯𝒽𝒶𝓃𝓀 𝓎𝑜𝓊 𝒻𝑜𝓇 𝒸𝒽𝑜𝑜𝓈𝒾𝓃𝑔 𝓀𝑒𝒹𝒶𝒾 𝓀𝓎𝓊𝓉𝒾! ୨୧ ♡\n`;
+    msg += `Mohon diproses ya min, terima kasih! 🌷✨`;
+
+    const adminPhone = normalizeWaPhone(window.INITIAL_DATA?.adminPhone || '628972276154');
+    let waUrl = `https://wa.me/${adminPhone}?text=${encodeURIComponent(msg)}`;
+    if (window.INITIAL_DATA?.waBaseLink && window.INITIAL_DATA.waBaseLink.includes('wa.me')) {
+        const base = window.INITIAL_DATA.waBaseLink;
+        const delim = base.includes('?') ? '&' : '?';
+        waUrl = `${base}${delim}text=${encodeURIComponent(msg)}`;
+    }
+
+    const orderObj = {
+        orderCode,
+        customerName: custName,
+        customerPhone: custPhone,
+        outletCode,
+        outletName,
+        pickupTime: fullPickup,
+        notes,
+        hasPlasticBag: AppState.hasPlasticBag,
+        plasticBagQty,
+        plasticBagFee: plasticFee,
+        hasSingleItemFee: hasSingleFee,
+        singleItemFee,
+        status: 'diproses',
+        statusText: 'Pesanan Sedang Disiapkan',
+        statusDesc: 'Pesananmu sedang disiapkan dengan penuh cinta oleh Kedai Kyuti ♡',
+        items: JSON.parse(JSON.stringify(AppState.cart)),
+        subtotal,
+        total: grandTotal,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+
+    return {
+        orderCode,
+        order: orderObj,
+        waMessage: msg,
+        waUrl,
+        subtotal,
+        hasSingleFee,
+        singleFee,
+        singleItemFee,
+        plasticFee,
+        grandTotal,
+        plasticBagQty
+    };
+}
+
+const checkoutWaBtn = document.getElementById('checkoutWaBtn');
+if (checkoutWaBtn) {
+    checkoutWaBtn.addEventListener('click', () => {
+        const whStatus = checkWebHoursStatusNow();
+        if (!whStatus.isOpen) {
+            openWebClosedModal();
+            return;
+        }
+
+        if (isOutletClosed()) {
+            alert(`Maaf, Outlet ${AppState.outlet?.name || ''} saat ini sedang tutup. Silakan pilih outlet lain yang sedang buka untuk memesan.`);
+            openSheet('outletSheet');
+            return;
+        }
+
+        if (!AppState.cart.length) {
+            showToast('Keranjang kamu masih kosong.');
+            return;
+        }
+
+        const custName = document.getElementById('custName')?.value.trim();
+        if (!custName) {
+            alert('Silakan masukkan nama pemesan terlebih dahulu.');
+            document.getElementById('custName')?.focus();
+            return;
+        }
+
+        const custPhone = document.getElementById('custPhone')?.value.trim() || '';
+        const notes = document.getElementById('orderNotes')?.value.trim() || '';
+
+        let pickupTime = 'Sekarang';
+        if (AppState.pickupType === 'Atur Jam' && pickupTimeSelect) {
+            pickupTime = pickupTimeSelect.value || 'Sekarang';
+        }
+
+        // Instant local order & format generation (0 delay, bulletproof)
+        const generated = generateClientOrder({
+            custName,
+            custPhone,
+            notes,
+            pickupTime
+        });
+
+        // 1. Immediately save order into local history
+        try {
+            const history = JSON.parse(localStorage.getItem('kyuti_orders') || '[]');
+            history.unshift(generated.order);
+            localStorage.setItem('kyuti_orders', JSON.stringify(history.slice(0, 10)));
+        } catch (e) {
+            console.warn('Could not save order history:', e);
+        }
+
+        // 2. Clear cart
+        AppState.cart = [];
+        AppState.hasPlasticBag = false;
+        AppState.plasticBagQty = 1;
+        localStorage.removeItem('kyuti_cart');
+        updatePlasticBagUI();
+        updateCartUI();
+        closeSheet('cartSheet');
+
+        // 3. Prepare & show Order Success Modal
+        const successModalCode = document.getElementById('successModalCode');
+        const successModalName = document.getElementById('successModalName');
+        const successModalBag = document.getElementById('successModalBag');
+        const successModalTotal = document.getElementById('successModalTotal');
+        const successOpenWaBtn = document.getElementById('successOpenWaBtn');
+        const successCopyMsgBtn = document.getElementById('successCopyMsgBtn');
+        const successCopyMsgText = document.getElementById('successCopyMsgText');
+
+        if (successModalCode) successModalCode.textContent = generated.orderCode;
+        if (successModalName) successModalName.textContent = custName;
+        if (successModalBag) {
+            successModalBag.textContent = generated.plasticBagQty > 0 ? `${generated.plasticBagQty} pcs (+${formatRp(generated.plasticFee)})` : 'Tidak pakai';
+        }
+        if (successModalTotal) successModalTotal.textContent = formatRp(generated.grandTotal);
+        if (successOpenWaBtn) successOpenWaBtn.href = generated.waUrl;
+
+        if (successCopyMsgBtn) {
+            successCopyMsgBtn.onclick = () => {
+                copyToClipboard(generated.waMessage, () => {
+                    if (successCopyMsgText) successCopyMsgText.textContent = '✓ Format Disalin!';
+                    showToast('✓ Format pesanan berhasil disalin ke clipboard!');
+                    setTimeout(() => {
+                        if (successCopyMsgText) successCopyMsgText.textContent = 'Salin Format Pesanan';
+                    }, 2500);
+                });
+            };
+        }
+
+        openSheet('orderSuccessModal');
+        showToast(`✓ Pesanan ${generated.orderCode} berhasil dibuat! Membuka WhatsApp...`);
+
+        // 4. Redirect to WhatsApp via window.location.href (never blocked by mobile popup blockers!)
+        setTimeout(() => {
+            window.location.href = generated.waUrl;
+        }, 350);
+
+        // 5. Send order payload to server asynchronously (silent, non-blocking)
+        const serverPayload = {
+            orderCode: generated.orderCode,
+            customerName: custName,
+            customerPhone: custPhone,
+            outletCode: AppState.outlet?.code || 'LA.CODEFIN',
+            outletName: AppState.outlet?.name || 'Kopi Kenangan',
+            pickupTime: pickupTime,
+            pickupTimezone: AppState.pickupTimezone,
+            notes: notes,
+            plasticBag: generated.plasticBagQty > 0,
+            plasticBagQty: generated.plasticBagQty,
+            hasSingleItemFee: generated.hasSingleFee,
+            singleItemFee: generated.singleItemFee,
+            items: generated.order.items,
+            subtotal: generated.subtotal
+        };
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        fetch('api/order.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(serverPayload),
+            signal: controller.signal
+        })
+        .then(res => res.json())
+        .then(res => {
+            clearTimeout(timeoutId);
+            if (res.success && res.order) {
+                try {
+                    const h = JSON.parse(localStorage.getItem('kyuti_orders') || '[]');
+                    const idx = h.findIndex(o => o.orderCode === generated.orderCode);
+                    if (idx !== -1) {
+                        h[idx] = res.order;
+                        localStorage.setItem('kyuti_orders', JSON.stringify(h));
+                    }
+                } catch (err) {}
+            }
+        })
+        .catch(err => {
+            clearTimeout(timeoutId);
+            console.log('Background server sync finished:', err?.name);
+        });
+    });
+}
+
+// =========================================================================
+// 8. ORDER TRACKING CONTROLLER
+// =========================================================================
+
+const trackOrderBtn = document.getElementById('trackOrderBtn');
+if (trackOrderBtn) {
+    trackOrderBtn.addEventListener('click', () => {
+        openSheet('trackSheet');
+    });
+}
+
+const trackSubmitBtn = document.getElementById('trackSubmitBtn');
+const trackCodeInput = document.getElementById('trackCodeInput');
+const trackResultBox = document.getElementById('trackResultBox');
+
+if (trackSubmitBtn && trackCodeInput && trackResultBox) {
+    trackSubmitBtn.addEventListener('click', () => {
+        const code = trackCodeInput.value.trim().toUpperCase();
+        if (!code) {
+            showToast('Silakan ketik kode pesanan.');
+            return;
+        }
+
+        trackSubmitBtn.disabled = true;
+        trackSubmitBtn.textContent = 'Mencari...';
+
+        fetch(`api/track.php?code=${encodeURIComponent(code)}`)
+            .then(res => res.json())
+            .then(res => {
+                if (res.success && res.order) {
+                    const ord = res.order;
+                    trackResultBox.innerHTML = `
+                        <div style="background:var(--bg-page);border-radius:var(--radius-lg);padding:16px;border:1px solid var(--border-color);animation:fadeIn 0.3s ease">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                <b style="font-size:14px;color:var(--brand-primary-dark)">${ord.code}</b>
+                                <span class="pill pill-open">Sedang Disiapkan</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${ord.statusDesc || 'Barista sedang meracik pesananmu.'}</div>
+                            <div style="border-top:1px dashed var(--border-color);padding-top:10px;font-size:12px">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                                    <span>Outlet:</span>
+                                    <b>${ord.outletName || 'Kopi Kenangan'}</b>
+                                </div>
+                                <div style="display:flex;justify-content:space-between">
+                                    <span>Waktu Pickup:</span>
+                                    <b>${ord.pickup || 'Sekarang'}</b>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    trackResultBox.innerHTML = `
+                        <div class="empty-box">
+                            <div class="empty-icon">✕</div>
+                            <p>${res.message || 'Pesanan tidak ditemukan.'}</p>
+                        </div>
+                    `;
+                }
+            })
+            .catch(() => {
+                trackResultBox.innerHTML = `
+                    <div class="empty-box">
+                        <div class="empty-icon">⚠️</div>
+                        <p>Gagal menghubungi server pelacakan.</p>
+                    </div>
+                `;
+            })
+            .finally(() => {
+                trackSubmitBtn.disabled = false;
+                trackSubmitBtn.textContent = 'Lacak';
+            });
+    });
+}
+
+// =========================================================================
+// 8. ADMIN PRICING & FEE MANAGEMENT CONTROLLER
+// =========================================================================
+
+let adminPricingState = {
+    activePasscode: '',
+    defaultMarkup: window.INITIAL_DATA?.pricing?.defaultMarkup || 5000,
+    categoryMarkups: window.INITIAL_DATA?.pricing?.categoryMarkups || {
+        Coffee: 5000,
+        'Non Coffee': 5000,
+        Frappe: 5000,
+        Food: 4500,
+        Minuman: 5000,
+        Makanan: 4500,
+    },
+    itemMarkupOverrides: (window.INITIAL_DATA?.pricing?.itemMarkupOverrides && typeof window.INITIAL_DATA.pricing.itemMarkupOverrides === 'object' && !Array.isArray(window.INITIAL_DATA.pricing.itemMarkupOverrides))
+        ? Object.assign({}, window.INITIAL_DATA.pricing.itemMarkupOverrides)
+        : {},
+    singleItemFee: window.INITIAL_DATA?.singleItemFee ?? 0,
+    plasticBagFee: window.INITIAL_DATA?.plasticBagFee || 1000,
+    bundlingStatus: (window.INITIAL_DATA?.pricing?.bundlingStatus && typeof window.INITIAL_DATA.pricing.bundlingStatus === 'object')
+        ? Object.assign({}, window.INITIAL_DATA.pricing.bundlingStatus)
+        : {
+            bundle_2_cup_large: true,
+            bundle_2_frappe: true,
+            promo_minuman_special: true,
+            bundle_hemat_3_item: true,
+        },
+    disabledBundlingOptions: Array.isArray(window.INITIAL_DATA?.pricing?.disabledBundlingOptions)
+        ? [...window.INITIAL_DATA.pricing.disabledBundlingOptions]
+        : [],
+    bgmPlaylist: Array.isArray(window.INITIAL_DATA?.bgm?.playlist)
+        ? [...window.INITIAL_DATA.bgm.playlist]
+        : [],
+    bgmEnabled: window.INITIAL_DATA?.bgm?.enabled !== false,
+    bgmVolume: window.INITIAL_DATA?.bgm?.default_volume ?? 0.4,
+};
+
+function initAdminPricingFeature() {
+    const adminTriggers = [
+        document.getElementById('openAdminPricingBtn'),
+        ...document.querySelectorAll('.open-admin-trigger-link')
+    ].filter(Boolean);
+
+    adminTriggers.forEach(btn => {
+        btn.addEventListener('click', () => {
+            adminPricingState.activePasscode = '';
+            sessionStorage.removeItem('kyuti_admin_auth');
+            sessionStorage.removeItem('kyuti_admin_code');
+            const passInput = document.getElementById('adminPasscodeInput');
+            const errBox = document.getElementById('adminPasscodeErr');
+            if (passInput) passInput.value = '';
+            if (errBox) errBox.style.display = 'none';
+            openSheet('adminPasscodeModal');
+        });
+    });
+
+    // Passcode Verification
+    const passSubmitBtn = document.getElementById('adminPasscodeSubmitBtn');
+    const passInput = document.getElementById('adminPasscodeInput');
+    const passErr = document.getElementById('adminPasscodeErr');
+
+    const handlePasscodeSubmit = () => {
+        const code = (passInput?.value || '').trim();
+        if (!code) {
+            if (passErr) {
+                passErr.textContent = 'Silakan masukkan passcode admin.';
+                passErr.style.display = 'block';
+            }
+            return;
+        }
+
+        if (passSubmitBtn) {
+            passSubmitBtn.disabled = true;
+            passSubmitBtn.textContent = 'Memverifikasi...';
+        }
+
+        fetch(`api/admin_pricing.php?code=${encodeURIComponent(code)}&_t=${Date.now()}`)
+            .then(res => res.json())
+            .then(res => {
+                if (res.success && res.data) {
+                    adminPricingState.activePasscode = code;
+                    sessionStorage.setItem('kyuti_admin_auth', '1');
+                    sessionStorage.setItem('kyuti_admin_code', code);
+                    closeSheet('adminPasscodeModal');
+                    populateAdminPricingForm(res.data, res.database);
+                    openSheet('adminPricingSheet');
+                    showToast('✓ Akses admin berhasil terverifikasi!');
+                } else {
+                    if (passErr) {
+                        passErr.textContent = res.message || '✕ Kode redeem / passcode salah!';
+                        passErr.style.display = 'block';
+                    }
+                }
+            })
+            .catch(() => {
+                if (passErr) {
+                    passErr.textContent = '✕ Gagal menghubungi server verifikasi.';
+                    passErr.style.display = 'block';
+                }
+            })
+            .finally(() => {
+                if (passSubmitBtn) {
+                    passSubmitBtn.disabled = false;
+                    passSubmitBtn.textContent = 'Verifikasi & Masuk';
+                }
+            });
+    };
+
+    if (passSubmitBtn) passSubmitBtn.addEventListener('click', handlePasscodeSubmit);
+    if (passInput) {
+        passInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handlePasscodeSubmit();
+        });
+    }
+
+    // Menu Dropdown & Size Selection Handler
+    const menuSelect = document.getElementById('cfgMenuSelect');
+    const sizeSelect = document.getElementById('cfgItemSizeSelect');
+    const customWrap = document.getElementById('cfgCustomNameWrap');
+    const nameInput = document.getElementById('cfgNewItemName');
+    const feeInput = document.getElementById('cfgNewItemFee');
+
+    const updateFeeSuggestion = () => {
+        let val = (menuSelect?.value || '').trim();
+        if (val === '__CUSTOM__') {
+            val = (nameInput?.value || '').trim();
+        }
+        if (!val) return;
+
+        const isLarge = sizeSelect?.value === 'Large';
+        const baseName = val.replace(/\s*\(large\)$/i, '').trim();
+        const targetKey = isLarge ? `${baseName} (Large)` : baseName;
+
+        // Pre-fill fee if already overridden, or suggest category/default fee
+        if (adminPricingState.itemMarkupOverrides?.[targetKey] !== undefined) {
+            if (feeInput) feeInput.value = adminPricingState.itemMarkupOverrides[targetKey];
+        } else {
+            const items = AppState.menu?.items || window.INITIAL_DATA?.menu?.items || [];
+            const found = items.find(i => i.name === baseName);
+            const cat = found?.category || 'Coffee';
+            const catMarkup = adminPricingState.categoryMarkups?.[cat];
+            const defaultFee = catMarkup !== undefined ? catMarkup : (adminPricingState.defaultMarkup || 5000);
+            if (feeInput) feeInput.value = defaultFee;
+        }
+    };
+
+    if (menuSelect) {
+        menuSelect.addEventListener('change', () => {
+            const val = menuSelect.value;
+            if (val === '__CUSTOM__') {
+                if (customWrap) customWrap.style.display = 'block';
+                if (nameInput) {
+                    nameInput.value = '';
+                    nameInput.focus();
+                }
+            } else {
+                if (customWrap) customWrap.style.display = 'none';
+                if (nameInput) nameInput.value = val;
+                updateFeeSuggestion();
+            }
+        });
+    }
+
+    if (sizeSelect) {
+        sizeSelect.addEventListener('change', updateFeeSuggestion);
+    }
+
+    // Add New Item Override Button
+    const addItemBtn = document.getElementById('cfgAddNewItemBtn');
+    if (addItemBtn) {
+        addItemBtn.addEventListener('click', () => {
+            let rawName = (menuSelect?.value || '').trim();
+            if (rawName === '__CUSTOM__' || !rawName) {
+                rawName = (nameInput?.value || '').trim();
+            }
+            const fee = parseInt(feeInput?.value || '0', 10);
+            const isLarge = sizeSelect?.value === 'Large';
+
+            if (!rawName) {
+                showToast('Silakan pilih menu dari daftar API terlebih dahulu');
+                return;
+            }
+            if (isNaN(fee) || fee < 0) {
+                showToast('Masukkan nominal fee tambahan yang valid');
+                return;
+            }
+
+            const baseName = rawName.replace(/\s*\(large\)$/i, '').trim();
+            const targetKey = isLarge ? `${baseName} (Large)` : baseName;
+
+            adminPricingState.itemMarkupOverrides[targetKey] = fee;
+            renderItemOverridesList();
+            populateMenuDropdown();
+
+            if (menuSelect) menuSelect.value = '';
+            if (nameInput) nameInput.value = '';
+            if (feeInput) feeInput.value = '';
+            if (sizeSelect) sizeSelect.value = '';
+            if (customWrap) customWrap.style.display = 'none';
+
+            showToast(`✓ Fee khusus untuk "${targetKey}" diset +${formatRp(fee).replace('Rp ', '')}`);
+        });
+    }
+
+    // Add Disabled Bundling Option Button
+    const addDisabledBundlingBtn = document.getElementById('cfgAddDisabledOptionBtn');
+    const disableBundlingSelect = document.getElementById('cfgDisableBundlingSelect');
+    if (addDisabledBundlingBtn && disableBundlingSelect) {
+        addDisabledBundlingBtn.addEventListener('click', () => {
+            const val = disableBundlingSelect.value.trim();
+            if (!val) {
+                showToast('Silakan pilih menu bundling yang ingin dinonaktifkan.');
+                return;
+            }
+            if (!adminPricingState.disabledBundlingOptions.includes(val)) {
+                adminPricingState.disabledBundlingOptions.push(val);
+                renderDisabledBundlingOptionsList();
+                showToast(`✓ "${val}" dinonaktifkan dari menu bundling.`);
+            } else {
+                showToast(`Menu "${val}" sudah berstatus nonaktif.`);
+            }
+            disableBundlingSelect.value = '';
+        });
+    }
+
+    // =========================================================================
+    // SECTION 7: PENGATURAN MUSIK & LAGU CAFÉ (BGM) (Upload MP3 & Link Input)
+    // =========================================================================
+    const volumeRange = document.getElementById('cfgBgmVolume');
+    const volumeVal = document.getElementById('cfgBgmVolumeVal');
+    if (volumeRange && volumeVal) {
+        volumeRange.addEventListener('input', () => {
+            volumeVal.textContent = `${volumeRange.value}%`;
+        });
+    }
+
+    // Tab switcher between Upload File and Input Link
+    const tabUploadBtn = document.getElementById('cfgBgmTabUploadBtn');
+    const tabLinkBtn = document.getElementById('cfgBgmTabLinkBtn');
+    const uploadPanel = document.getElementById('cfgBgmUploadPanel');
+    const linkPanel = document.getElementById('cfgBgmLinkPanel');
+
+    if (tabUploadBtn && tabLinkBtn && uploadPanel && linkPanel) {
+        tabUploadBtn.addEventListener('click', () => {
+            uploadPanel.style.display = 'block';
+            linkPanel.style.display = 'none';
+            tabUploadBtn.style.background = 'var(--brand-primary-light)';
+            tabUploadBtn.style.color = 'var(--brand-primary-dark)';
+            tabUploadBtn.style.borderColor = 'var(--brand-primary)';
+            tabLinkBtn.style.background = 'var(--bg-page)';
+            tabLinkBtn.style.color = 'var(--text-muted)';
+            tabLinkBtn.style.borderColor = 'var(--border-color)';
+        });
+
+        tabLinkBtn.addEventListener('click', () => {
+            uploadPanel.style.display = 'none';
+            linkPanel.style.display = 'block';
+            tabLinkBtn.style.background = 'var(--brand-primary-light)';
+            tabLinkBtn.style.color = 'var(--brand-primary-dark)';
+            tabLinkBtn.style.borderColor = 'var(--brand-primary)';
+            tabUploadBtn.style.background = 'var(--bg-page)';
+            tabUploadBtn.style.color = 'var(--text-muted)';
+            tabUploadBtn.style.borderColor = 'var(--border-color)';
+        });
+    }
+
+    // Upload File Handler (#cfgBgmSubmitUploadBtn)
+    const submitUploadBtn = document.getElementById('cfgBgmSubmitUploadBtn');
+    if (submitUploadBtn) {
+        submitUploadBtn.addEventListener('click', () => {
+            const fileInput = document.getElementById('cfgBgmFileInput');
+            const titleInput = document.getElementById('cfgBgmUploadTitle');
+            const artistInput = document.getElementById('cfgBgmUploadArtist');
+            const msgEl = document.getElementById('cfgBgmUploadMsg');
+
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                showToast('Silakan pilih file lagu .mp3 terlebih dahulu!');
+                fileInput?.focus();
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const filename = file.name || '';
+            const ext = filename.split('.').pop().toLowerCase();
+            if (ext !== 'mp3') {
+                showToast('Format file harus .mp3!');
+                return;
+            }
+
+            const title = (titleInput?.value || '').trim() || filename.replace(/\.mp3$/i, '');
+            const artist = (artistInput?.value || '').trim() || 'Kedai Kyuti';
+
+            const code = adminPricingState.activePasscode || sessionStorage.getItem('kyuti_admin_code') || '';
+            if (!code) {
+                showToast('Sesi admin berakhir. Silakan login kembali.');
+                return;
+            }
+
+            submitUploadBtn.disabled = true;
+            submitUploadBtn.innerHTML = '<span>Mengupload MP3...</span>';
+            if (msgEl) {
+                msgEl.textContent = '⏳ Sedang mengupload file audio...';
+                msgEl.style.display = 'block';
+                msgEl.style.color = 'var(--brand-primary-dark)';
+            }
+
+            const formData = new FormData();
+            formData.append('audio_file', file);
+            formData.append('code', code);
+            formData.append('title', title);
+            formData.append('artist', artist);
+
+            fetch('api/upload_audio.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success && res.url) {
+                    if (!Array.isArray(adminPricingState.bgmPlaylist)) {
+                        adminPricingState.bgmPlaylist = [];
+                    }
+                    adminPricingState.bgmPlaylist.push({
+                        title: title,
+                        artist: artist,
+                        src: res.url
+                    });
+                    renderAdminBgmPlaylist();
+
+                    fileInput.value = '';
+                    if (titleInput) titleInput.value = '';
+                    if (artistInput) artistInput.value = '';
+
+                    if (msgEl) {
+                        msgEl.textContent = `✓ Berhasil di-upload (${res.size_formatted || ''})! Klik "Simpan Perubahan Fee" untuk menyimpan permanen.`;
+                        msgEl.style.color = '#059669';
+                    }
+                    showToast(`✓ Lagu "${title}" berhasil ditambahkan!`);
+                } else {
+                    if (msgEl) {
+                        msgEl.textContent = `✕ ${res.message || 'Gagal upload'}`;
+                        msgEl.style.color = '#DC2626';
+                    }
+                    showToast(`✕ ${res.message || 'Gagal mengupload MP3'}`);
+                }
+            })
+            .catch(() => {
+                if (msgEl) {
+                    msgEl.textContent = '✕ Gagal menghubungi server upload.';
+                    msgEl.style.color = '#DC2626';
+                }
+                showToast('✕ Gagal menghubungi server upload.');
+            })
+            .finally(() => {
+                submitUploadBtn.disabled = false;
+                submitUploadBtn.innerHTML = '<span>📤 Upload File &amp; Tambahkan</span>';
+            });
+        });
+    }
+
+    // Add from Link Handler (#cfgBgmSubmitLinkBtn)
+    const submitLinkBtn = document.getElementById('cfgBgmSubmitLinkBtn');
+    if (submitLinkBtn) {
+        submitLinkBtn.addEventListener('click', () => {
+            const linkUrlInput = document.getElementById('cfgBgmLinkUrl');
+            const linkTitleInput = document.getElementById('cfgBgmLinkTitle');
+            const linkArtistInput = document.getElementById('cfgBgmLinkArtist');
+
+            let url = (linkUrlInput?.value || '').trim();
+            if (!url) {
+                showToast('Silakan masukkan link/URL file MP3!');
+                linkUrlInput?.focus();
+                return;
+            }
+
+            // Auto detect YouTube links for Full Playback:
+            let youtubeId = '';
+            const ytMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_\-]{11})/i);
+            if (ytMatch && ytMatch[1]) {
+                youtubeId = ytMatch[1];
+            }
+
+            // Auto convert Google Drive links:
+            const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+            if (driveMatch && driveMatch[1]) {
+                url = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+            }
+
+            // Auto convert Dropbox links:
+            if (url.includes('dropbox.com')) {
+                url = url.replace(/[?&]dl=0/, '?raw=1');
+                if (!url.includes('raw=1')) {
+                    url += (url.includes('?') ? '&' : '?') + 'raw=1';
+                }
+            }
+
+            const title = (linkTitleInput?.value || '').trim() || 'Musik Café';
+            const artist = (linkArtistInput?.value || '').trim() || 'Kedai Kyuti';
+
+            if (!Array.isArray(adminPricingState.bgmPlaylist)) {
+                adminPricingState.bgmPlaylist = [];
+            }
+            const newTrack = {
+                title: title,
+                artist: artist,
+                src: url
+            };
+            if (youtubeId) newTrack.youtube_id = youtubeId;
+
+            adminPricingState.bgmPlaylist.push(newTrack);
+            renderAdminBgmPlaylist();
+
+            linkUrlInput.value = '';
+            if (linkTitleInput) linkTitleInput.value = '';
+            if (linkArtistInput) linkArtistInput.value = '';
+
+            showToast(`✓ Lagu "${title}" ditambahkan ke playlist! Jangan lupa klik Simpan.`);
+        });
+    }
+
+    // Reset default playlist button (#cfgBgmResetBtn)
+    const resetBgmBtn = document.getElementById('cfgBgmResetBtn');
+    if (resetBgmBtn) {
+        resetBgmBtn.addEventListener('click', () => {
+            if (!confirm('Kembalikan daftar lagu ke musik bawaan Kedai Kyuti?')) return;
+            adminPricingState.bgmPlaylist = [
+                {
+                    title: 'Negoro Angin (Trending TikTok ♫)',
+                    artist: 'Denny Caknan',
+                    youtube_id: '6kKuzB_YOmc',
+                    src: ''
+                }
+            ];
+            renderAdminBgmPlaylist();
+            showToast('↺ Playlist dikembalikan ke default. Klik Simpan untuk menerapkan.');
+        });
+    }
+
+    // Auto-Sync TikTok Viral Hits (#btnSyncTikTokHits)
+    const syncTikTokBtn = document.getElementById('btnSyncTikTokHits');
+    const syncTikTokMsg = document.getElementById('syncTikTokMsg');
+    const syncTikTokText = document.getElementById('btnSyncTikTokHitsText');
+
+    if (syncTikTokBtn) {
+        syncTikTokBtn.addEventListener('click', () => {
+            const code = adminPricingState.activePasscode || sessionStorage.getItem('kyuti_admin_code') || '';
+            if (!code) {
+                showToast('✕ Sesi admin telah berakhir. Silakan masukkan passcode kembali.');
+                return;
+            }
+
+            syncTikTokBtn.disabled = true;
+            if (syncTikTokText) syncTikTokText.textContent = '⏳ Menarik Lagu Viral TikTok...';
+            if (syncTikTokMsg) {
+                syncTikTokMsg.style.display = 'block';
+                syncTikTokMsg.style.color = 'var(--brand-primary)';
+                syncTikTokMsg.textContent = 'Sedang menarik daftar lagu viral TikTok versi lirik audio full...';
+            }
+
+            fetch('api/sync_tiktok_hits.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Code': code
+                },
+                body: JSON.stringify({
+                    passcode: code,
+                    limit: 15
+                })
+            })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success && Array.isArray(res.playlist)) {
+                        adminPricingState.bgmPlaylist = [...res.playlist];
+                        renderAdminBgmPlaylist();
+                        if (typeof window.reloadBgmPlayer === 'function') {
+                            window.reloadBgmPlayer({
+                                enabled: true,
+                                playlist: res.playlist
+                            });
+                        }
+                        if (syncTikTokMsg) {
+                            syncTikTokMsg.style.color = '#15803D';
+                            syncTikTokMsg.textContent = `✓ ${res.message || 'Lagu viral TikTok berhasil disinkronkan!'}`;
+                        }
+                        showToast(`✓ Berhasil sync ${res.count || res.playlist.length} lagu viral TikTok!`);
+                    } else {
+                        if (syncTikTokMsg) {
+                            syncTikTokMsg.style.color = '#DC2626';
+                            syncTikTokMsg.textContent = `✕ ${res.message || 'Gagal sinkronisasi lagu viral'}`;
+                        }
+                        showToast(`✕ ${res.message || 'Gagal sinkronisasi'}`);
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    if (syncTikTokMsg) {
+                        syncTikTokMsg.style.color = '#DC2626';
+                        syncTikTokMsg.textContent = '✕ Gagal menghubungi server sinkronisasi.';
+                    }
+                    showToast('✕ Gagal menghubungi server.');
+                })
+                .finally(() => {
+                    syncTikTokBtn.disabled = false;
+                    if (syncTikTokText) syncTikTokText.textContent = '🔄 Tarik Lagu Viral TikTok Sekarang';
+                });
+        });
+    }
+
+    // Save Admin Pricing Changes
+    const saveBtn = document.getElementById('saveAdminPricingBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            const code = adminPricingState.activePasscode || sessionStorage.getItem('kyuti_admin_code') || '';
+            if (!code) {
+                showToast('✕ Sesi admin telah berakhir. Silakan masukkan kode kembali.');
+                closeSheet('adminPricingSheet');
+                return;
+            }
+            const defMarkup = parseFloat(document.getElementById('cfgDefaultMarkup')?.value || '5000');
+            const drinkMarkup = parseFloat(document.getElementById('cfgCategoryDrinks')?.value || '5000');
+            const foodMarkup = parseFloat(document.getElementById('cfgCategoryFood')?.value || '4500');
+            const singleFee = parseFloat(document.getElementById('cfgSingleItemFee')?.value || '2000');
+            const plasticFee = parseFloat(document.getElementById('cfgPlasticBagFee')?.value || '1000');
+
+            // Web Operating Hours Settings
+            const webHoursEnabled = document.getElementById('cfgWebHoursEnabled')?.checked ?? true;
+            const webHoursOpen = document.getElementById('cfgWebHoursOpen')?.value || '09:00';
+            const webHoursClose = document.getElementById('cfgWebHoursClose')?.value || '12:00';
+            const webHoursForce = document.getElementById('cfgWebHoursForce')?.value || 'auto';
+            const webHoursMsg = document.getElementById('cfgWebHoursMsg')?.value || '';
+
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span>Menyimpan pengaturan...</span>';
+
+            const payload = {
+                code: code,
+                default_markup: defMarkup,
+                category_markups: {
+                    Coffee: drinkMarkup,
+                    'Non Coffee': drinkMarkup,
+                    Frappe: drinkMarkup,
+                    Food: foodMarkup,
+                    Minuman: drinkMarkup,
+                    Makanan: foodMarkup,
+                    Bundling: 0,
+                },
+                item_markup_overrides: adminPricingState.itemMarkupOverrides,
+                single_item_fee: singleFee,
+                plastic_bag_fee: plasticFee,
+                bundling_status: adminPricingState.bundlingStatus,
+                disabled_bundling_options: adminPricingState.disabledBundlingOptions,
+                web_hours: {
+                    enabled: webHoursEnabled,
+                    open: webHoursOpen,
+                    close: webHoursClose,
+                    force_status: webHoursForce,
+                    custom_closed_message: webHoursMsg
+                },
+                bgm: {
+                    enabled: document.getElementById('cfgBgmEnabled')?.checked ?? true,
+                    default_volume: (parseFloat(document.getElementById('cfgBgmVolume')?.value || '40')) / 100,
+                    playlist: Array.isArray(adminPricingState.bgmPlaylist) ? adminPricingState.bgmPlaylist : []
+                }
+            };
+
+            fetch('api/admin_pricing.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        AppState.singleItemFeeAmount = singleFee;
+                        AppState.plasticBagFeeAmount = plasticFee;
+
+                        // Synchronize in-memory admin pricing state & initial data
+                        if (res.data) {
+                            adminPricingState.itemMarkupOverrides = Object.assign({}, res.data.item_markup_overrides || {});
+                            if (res.data.bundling_status) {
+                                adminPricingState.bundlingStatus = Object.assign({}, res.data.bundling_status);
+                            }
+                            if (Array.isArray(res.data.disabled_bundling_options)) {
+                                adminPricingState.disabledBundlingOptions = [...res.data.disabled_bundling_options];
+                            }
+                            if (window.INITIAL_DATA?.pricing) {
+                                window.INITIAL_DATA.pricing.itemMarkupOverrides = Object.assign({}, res.data.item_markup_overrides || {});
+                                window.INITIAL_DATA.pricing.defaultMarkup = res.data.default_markup ?? defMarkup;
+                                window.INITIAL_DATA.pricing.categoryMarkups = Object.assign({}, res.data.category_markups || {});
+                                window.INITIAL_DATA.pricing.bundlingStatus = Object.assign({}, res.data.bundling_status || adminPricingState.bundlingStatus);
+                                window.INITIAL_DATA.pricing.disabledBundlingOptions = Array.isArray(res.data.disabled_bundling_options) ? [...res.data.disabled_bundling_options] : adminPricingState.disabledBundlingOptions;
+                            }
+                        } else {
+                            adminPricingState.itemMarkupOverrides = Object.assign({}, payload.item_markup_overrides || {});
+                        }
+
+                        // Save to localStorage for instant client-side persistence across reloads
+                        try {
+                            localStorage.setItem('kyuti_custom_pricing', JSON.stringify(res.data || payload));
+                        } catch (e) {}
+
+                        // Also set a 1-year Cookie so EVERY request (including menu & checkout) sends this pricing to Vercel PHP backend
+                        try {
+                            const cookieData = encodeURIComponent(JSON.stringify(res.data || payload));
+                            document.cookie = `kyuti_custom_pricing=${cookieData}; path=/; max-age=31536000; SameSite=Lax`;
+                        } catch (e) {}
+
+                        // Update Web Operating Hours in AppState
+                        if (res.data?.web_hours) {
+                            AppState.webHours = Object.assign({}, AppState.webHours, res.data.web_hours);
+                        } else {
+                            AppState.webHours = Object.assign({}, AppState.webHours, payload.web_hours);
+                        }
+                        updateWebHoursBanners();
+
+                        // Update BGM Playlist in AppState
+                        if (res.data?.bgm) {
+                            AppState.bgm = Object.assign({}, AppState.bgm, res.data.bgm);
+                        } else {
+                            AppState.bgm = Object.assign({}, AppState.bgm, payload.bgm);
+                        }
+                        if (window.reloadBgmPlayer) {
+                            window.reloadBgmPlayer(AppState.bgm);
+                        }
+
+                        updateCartUI();
+                        renderMenu();
+
+                        closeSheet('adminPricingSheet');
+                        adminPricingState.activePasscode = '';
+                        sessionStorage.removeItem('kyuti_admin_auth');
+                        sessionStorage.removeItem('kyuti_admin_code');
+                        showToast('✓ Pengaturan fee & bundling berhasil disimpan!');
+
+                        // Refresh menu to immediately apply new fee formula
+                        if (AppState.outlet?.code) {
+                            fetchMenu(AppState.outlet.code, true);
+                        }
+                    } else {
+                        showToast(`✕ ${res.message || 'Gagal menyimpan fee'}`);
+                    }
+                })
+                .catch(() => {
+                    showToast('✕ Gagal menghubungi server.');
+                })
+                .finally(() => {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<span>💾 Simpan Perubahan Fee</span>';
+                });
+        });
+    }
+}
+
+function loadAndOpenAdminPanel(code) {
+    fetch(`api/admin_pricing.php?code=${encodeURIComponent(code)}&_t=${Date.now()}`)
+        .then(res => res.json())
+        .then(res => {
+            if (res.success && res.data) {
+                populateAdminPricingForm(res.data, res.database);
+                openSheet('adminPricingSheet');
+            } else {
+                sessionStorage.removeItem('kyuti_admin_auth');
+                sessionStorage.removeItem('kyuti_admin_code');
+                openSheet('adminPasscodeModal');
+            }
+        })
+        .catch(() => {
+            openSheet('adminPasscodeModal');
+        });
+}
+
+function populateAdminPricingForm(data, dbInfo) {
+    if (!data) return;
+    const defInput = document.getElementById('cfgDefaultMarkup');
+    const drinksInput = document.getElementById('cfgCategoryDrinks');
+    const foodInput = document.getElementById('cfgCategoryFood');
+    const singleInput = document.getElementById('cfgSingleItemFee');
+    const plasticInput = document.getElementById('cfgPlasticBagFee');
+
+    if (defInput) defInput.value = data.default_markup ?? 5000;
+    if (drinksInput) drinksInput.value = data.category_markups?.Coffee ?? data.category_markups?.Minuman ?? 5000;
+    if (foodInput) foodInput.value = data.category_markups?.Food ?? data.category_markups?.Makanan ?? 4500;
+    if (singleInput) singleInput.value = data.single_item_fee ?? 2000;
+    if (plasticInput) plasticInput.value = data.plastic_bag_fee ?? 1000;
+
+    // Populate Section 6: Jam Operasional Web
+    const hoursData = data.web_hours || AppState.webHours || {};
+    const hoursEnabledInput = document.getElementById('cfgWebHoursEnabled');
+    const hoursOpenInput = document.getElementById('cfgWebHoursOpen');
+    const hoursCloseInput = document.getElementById('cfgWebHoursClose');
+    const hoursForceSelect = document.getElementById('cfgWebHoursForce');
+    const hoursMsgInput = document.getElementById('cfgWebHoursMsg');
+    const hoursBadge = document.getElementById('adminWebHoursBadge');
+
+    if (hoursEnabledInput) hoursEnabledInput.checked = hoursData.enabled !== false;
+    if (hoursOpenInput) hoursOpenInput.value = hoursData.open || '09:00';
+    if (hoursCloseInput) hoursCloseInput.value = hoursData.close || '12:00';
+    if (hoursForceSelect) hoursForceSelect.value = hoursData.force_status || 'auto';
+    if (hoursMsgInput) hoursMsgInput.value = hoursData.custom_closed_message || '';
+    if (hoursBadge) {
+        const status = checkWebHoursStatusNow();
+        hoursBadge.textContent = status.isOpen ? `● Status Saat Ini: Buka (${status.open} - ${status.close} WIB)` : `✕ Status Saat Ini: Tutup (${status.open} - ${status.close} WIB)`;
+        hoursBadge.style.color = status.isOpen ? '#059669' : '#DC2626';
+    }
+
+    const dbBadge = document.getElementById('adminDbStatusBadge');
+    if (dbBadge) {
+        if (dbInfo && dbInfo.cloud_connected) {
+            dbBadge.innerHTML = '🟢 Terhubung (Vercel KV Cloud)';
+            dbBadge.style.background = '#D1FAE5';
+            dbBadge.style.color = '#065F46';
+        } else {
+            dbBadge.innerHTML = '🟡 Belum Terhubung (Lokal / Cache)';
+            dbBadge.style.background = '#FEF3C7';
+            dbBadge.style.color = '#92400E';
+        }
+    }
+
+    adminPricingState.itemMarkupOverrides = Object.assign({}, data.item_markup_overrides || {});
+    adminPricingState.bundlingStatus = Object.assign({
+        bundle_2_cup_large: true,
+        bundle_2_frappe: true,
+        promo_minuman_special: true,
+        bundle_hemat_3_item: true,
+    }, data.bundling_status || {});
+    adminPricingState.disabledBundlingOptions = Array.isArray(data.disabled_bundling_options)
+        ? [...data.disabled_bundling_options]
+        : [];
+
+    // Populate Section 7: BGM Settings
+    const bgmData = data.bgm || AppState.bgm || window.INITIAL_DATA?.bgm || {};
+    const bgmEnabledInput = document.getElementById('cfgBgmEnabled');
+    const bgmVolumeInput = document.getElementById('cfgBgmVolume');
+    const bgmVolumeVal = document.getElementById('cfgBgmVolumeVal');
+
+    if (bgmEnabledInput) bgmEnabledInput.checked = bgmData.enabled !== false;
+    const vol = bgmData.default_volume !== undefined ? Math.round(bgmData.default_volume * 100) : 40;
+    if (bgmVolumeInput) bgmVolumeInput.value = vol;
+    if (bgmVolumeVal) bgmVolumeVal.textContent = `${vol}%`;
+
+    adminPricingState.bgmPlaylist = Array.isArray(bgmData.playlist) && bgmData.playlist.length > 0
+        ? [...bgmData.playlist]
+        : (Array.isArray(window.INITIAL_DATA?.bgm?.playlist) ? [...window.INITIAL_DATA.bgm.playlist] : []);
+
+    renderAdminBgmPlaylist();
+
+    renderItemOverridesList();
+    renderBundlingStatusList();
+    populateBundlingOptionsDropdown();
+    renderDisabledBundlingOptionsList();
+    populateMenuDropdown();
+    loadAdminReviewsList();
+}
+
+function renderAdminBgmPlaylist() {
+    const container = document.getElementById('cfgBgmPlaylistContainer');
+    const badge = document.getElementById('cfgBgmActiveCountBadge');
+    if (!container) return;
+
+    const list = adminPricingState.bgmPlaylist || [];
+    if (badge) badge.textContent = `${list.length} Lagu Aktif`;
+
+    if (list.length === 0) {
+        container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:8px;text-align:center;background:var(--bg-card);border:1px dashed var(--border-color);border-radius:var(--radius-sm)">Belum ada lagu di playlist. Silakan upload file MP3 atau masukkan link lagu di bawah.</div>';
+        return;
+    }
+
+    container.innerHTML = list.map((track, idx) => {
+        const isBlobOrData = track.src?.startsWith('data:');
+        const srcDisplay = isBlobOrData ? '📁 File MP3 Upload Langsung' : (track.src || '');
+        return `
+            <div class="admin-bgm-row">
+                <div class="admin-bgm-info">
+                    <span class="admin-bgm-title">${idx + 1}. ${escapeHtml(track.title || 'Lagu')}</span>
+                    <small class="admin-bgm-artist">${escapeHtml(track.artist || 'Kedai Kyuti')} • <span style="opacity:0.8">${escapeHtml(srcDisplay.length > 40 ? srcDisplay.substring(0, 37) + '...' : srcDisplay)}</span></small>
+                </div>
+                <div class="admin-bgm-actions">
+                    <button type="button" class="admin-bgm-btn cfg-bgm-preview-btn" data-idx="${idx}" title="Putar Preview">
+                        ▶ Tes
+                    </button>
+                    <button type="button" class="admin-bgm-btn admin-bgm-btn-del cfg-bgm-del-btn" data-idx="${idx}" title="Hapus Lagu">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Preview button
+    container.querySelectorAll('.cfg-bgm-preview-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx, 10);
+            const track = list[idx];
+            if (!track || !track.src) return;
+            const audio = document.getElementById('bgmAudio');
+            if (audio) {
+                audio.src = track.src;
+                audio.play().then(() => {
+                    showToast(`▶ Memutar preview: ${track.title}`);
+                }).catch(() => {
+                    showToast(`✕ Tidak dapat memutar audio link ini.`);
+                });
+            }
+        });
+    });
+
+    // Delete button
+    container.querySelectorAll('.cfg-bgm-del-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx, 10);
+            const deleted = list.splice(idx, 1);
+            renderAdminBgmPlaylist();
+            showToast(`✓ Lagu "${deleted[0]?.title || ''}" dihapus dari playlist.`);
+        });
+    });
+}
+
+function renderBundlingStatusList() {
+    const container = document.getElementById('cfgBundlingStatusList');
+    if (!container) return;
+
+    const packages = [
+        { key: 'bundle_2_cup_large', label: 'PAKET BUNDLING 2 CUP LARGE' },
+        { key: 'bundle_2_frappe', label: 'PAKET BUNDLING 2 FRAPPE' },
+        { key: 'promo_minuman_special', label: 'PROMO MINUMAN SPECIAL' },
+        { key: 'bundle_hemat_3_item', label: 'PAKET HEMAT 3 ITEM' },
+    ];
+
+    container.innerHTML = packages.map(pkg => {
+        const isOn = adminPricingState.bundlingStatus[pkg.key] !== false;
+        return `
+            <div class="admin-bundling-toggle-row">
+                <div>
+                    <div style="font-size:12px;font-weight:800;color:var(--text-main)">${pkg.label}</div>
+                    <small style="font-size:10px;color:${isOn ? '#059669' : '#DC2626'};font-weight:700">
+                        ${isOn ? '● Status: Aktif (Ditampilkan di Website)' : '✕ Status: Nonaktif (Disembunyikan)'}
+                    </small>
+                </div>
+                <label class="admin-toggle-switch">
+                    <input type="checkbox" class="cfg-bundle-pkg-toggle" data-key="${pkg.key}" ${isOn ? 'checked' : ''}>
+                    <span class="admin-toggle-slider"></span>
+                </label>
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.cfg-bundle-pkg-toggle').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const key = e.target.dataset.key;
+            adminPricingState.bundlingStatus[key] = e.target.checked;
+            renderBundlingStatusList();
+            renderMenu();
+        });
+    });
+}
+
+function renderDisabledBundlingOptionsList() {
+    const container = document.getElementById('cfgDisabledOptionsList');
+    if (!container) return;
+
+    const list = adminPricingState.disabledBundlingOptions || [];
+    if (!list.length) {
+        container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);font-style:italic">Semua varian menu dalam paket bundling berstatus aktif.</div>';
+        return;
+    }
+
+    container.innerHTML = list.map(item => `
+        <div class="disabled-bundling-pill">
+            <span>${esc(item)}</span>
+            <button type="button" class="btn-remove-disabled-bundle" data-val="${esc(item)}" title="Aktifkan Kembali">✕</button>
+        </div>
+    `).join('');
+
+    container.querySelectorAll('.btn-remove-disabled-bundle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const val = btn.dataset.val;
+            adminPricingState.disabledBundlingOptions = adminPricingState.disabledBundlingOptions.filter(x => x !== val);
+            renderDisabledBundlingOptionsList();
+            showToast(`✓ "${val}" diaktifkan kembali di bundling.`);
+        });
+    });
+}
+
+function populateBundlingOptionsDropdown() {
+    const select = document.getElementById('cfgDisableBundlingSelect');
+    if (!select) return;
+
+    const allOptionsSet = new Set();
+    const bundlingItems = window.INITIAL_DATA?.bundlingItems || [];
+    bundlingItems.forEach(b => {
+        (b.slots || []).forEach(slot => {
+            if (slot.groups) {
+                Object.values(slot.groups).forEach(grp => {
+                    grp.forEach(name => allOptionsSet.add(name));
+                });
+            } else if (Array.isArray(slot.options)) {
+                slot.options.forEach(opt => {
+                    const name = typeof opt === 'string' ? opt : opt.name;
+                    if (name) {
+                        if (name.includes('+')) {
+                            name.split('+').forEach(p => allOptionsSet.add(p.trim()));
+                            allOptionsSet.add(name);
+                        } else {
+                            allOptionsSet.add(name);
+                        }
+                    }
+                });
+            }
+        });
+    });
+
+    const sorted = Array.from(allOptionsSet).sort((a, b) => a.localeCompare(b));
+    let html = '<option value="">-- 🔍 Pilih Menu untuk Dinonaktifkan --</option>';
+    sorted.forEach(opt => {
+        html += `<option value="${esc(opt)}">${esc(opt)}</option>`;
+    });
+    select.innerHTML = html;
+}
+
+function renderItemOverridesList() {
+    const container = document.getElementById('cfgItemOverridesList');
+    if (!container) return;
+
+    const entries = Object.entries(adminPricingState.itemMarkupOverrides || {});
+    if (!entries.length) {
+        container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);font-style:italic">Belum ada fee khusus per menu. Semua menu mengikuti fee kategori/default.</div>';
+        return;
+    }
+
+    container.innerHTML = entries.map(([name, fee]) => {
+        const isLarge = /\(large\)$/i.test(name.trim());
+        const cleanName = isLarge ? name.replace(/\s*\(large\)$/i, '') : name;
+        const sizeBadge = isLarge
+            ? '<span style="background:#FCE7F3;color:#BE185D;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;border:1px solid #FBCFE8">Ukuran: Large ⭐</span>'
+            : '<span style="background:#E0F2FE;color:#0369A1;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;border:1px solid #BAE6FD">Regular / Default</span>';
+
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:9px 12px;">
+            <div style="display:flex;flex-direction:column;gap:3px">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span style="font-size:12.5px;font-weight:800;color:var(--text-main)">${cleanName}</span>
+                    ${sizeBadge}
+                </div>
+                <span class="fee-badge-pill" style="font-size:11px;padding:2px 8px;width:fit-content">+Rp ${Number(fee).toLocaleString('id-ID')}</span>
+            </div>
+            <button type="button" class="btn-del-override" data-name="${name.replace(/"/g, '&quot;')}" style="background:#FFE4E6;color:#E11D48;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px;font-weight:700">
+                Hapus ✕
+            </button>
+        </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.btn-del-override').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const itemName = btn.dataset.name;
+            if (itemName && adminPricingState.itemMarkupOverrides[itemName] !== undefined) {
+                delete adminPricingState.itemMarkupOverrides[itemName];
+                renderItemOverridesList();
+                populateMenuDropdown();
+                showToast(`Fee khusus "${itemName}" dihapus.`);
+            }
+        });
+    });
+}
+
+function populateMenuDropdown() {
+    const select = document.getElementById('cfgMenuSelect');
+    if (!select) return;
+
+    // Get live items from AppState.menu or initial data + bundling items
+    let items = (AppState.menu?.items || window.INITIAL_DATA?.menu?.items || []).slice();
+    if (Array.isArray(AppState.bundlingItems)) {
+        AppState.bundlingItems.forEach(b => {
+            if (b && b.name && !items.find(i => i.name === b.name)) {
+                items.push({ name: b.name, category: 'Bundling' });
+            }
+        });
+    }
+    
+    if (!items.length) {
+        select.innerHTML = '<option value="">-- Menu sedang dimuat dari API... --</option>';
+        return;
+    }
+
+    // Group items by category (Coffee, Non Coffee, Frappe, Food, Bundling, etc.)
+    const groups = {};
+    items.forEach(item => {
+        if (!item || !item.name) return;
+        const cat = item.category || 'Lainnya';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item.name);
+    });
+
+    let html = '<option value="">-- 🔍 Pilih Menu dari API (Tinggal Klik) --</option>';
+    
+    // Sort categories: Coffee, Non Coffee, Frappe, Food, Bundling, etc.
+    const catKeys = Object.keys(groups).sort((a, b) => {
+        if (a === 'Coffee') return -1;
+        if (b === 'Coffee') return 1;
+        if (a === 'Non Coffee') return -1;
+        if (b === 'Non Coffee') return 1;
+        if (a === 'Frappe') return -1;
+        if (b === 'Frappe') return 1;
+        if (a === 'Food') return -1;
+        if (b === 'Food') return 1;
+        return a.localeCompare(b);
+    });
+
+    catKeys.forEach(cat => {
+        const uniqueNames = Array.from(new Set(groups[cat])).sort((a, b) => a.localeCompare(b));
+        const icon = cat === 'Coffee' ? '☕' : (cat === 'Non Coffee' ? '🍵' : (cat === 'Frappe' ? '🍦' : (cat === 'Food' ? '🥪' : (cat === 'Bundling' ? '🎀' : '📂'))));
+        html += `<optgroup label="${icon} ${cat}">`;
+        uniqueNames.forEach(name => {
+            const currentReg = adminPricingState.itemMarkupOverrides?.[name];
+            const currentLarge = adminPricingState.itemMarkupOverrides?.[`${name} (Large)`];
+            let badge = '';
+            if (currentReg !== undefined && currentLarge !== undefined) {
+                badge = ` ★ (Reg: +${Number(currentReg).toLocaleString('id-ID')} | L: +${Number(currentLarge).toLocaleString('id-ID')})`;
+            } else if (currentReg !== undefined) {
+                badge = ` ★ (Reg: +Rp ${Number(currentReg).toLocaleString('id-ID')})`;
+            } else if (currentLarge !== undefined) {
+                badge = ` ★ (Large: +Rp ${Number(currentLarge).toLocaleString('id-ID')})`;
+            }
+            html += `<option value="${name.replace(/"/g, '&quot;')}">${name}${badge}</option>`;
+        });
+        html += `</optgroup>`;
+    });
+
+    html += '<option value="__CUSTOM__">✍️ Ketik Nama Manual...</option>';
+
+    select.innerHTML = html;
+}
+
+// =========================================================================
+// 12. WI-FI OUTLET INTEGRATION (Revisi Client ala Referensi)
+// =========================================================================
+
+async function fetchWifi(outletCode) {
+    const code = outletCode || AppState.outlet?.code || 'LA.CODEFIN';
+    try {
+        const res = await fetch(`api/kopken/wifi?outlet=${encodeURIComponent(code)}`);
+        const data = await res.json();
+        if (data && data.wifi) {
+            updateWifiUI(data);
+            return data.wifi;
+        }
+    } catch (err) {
+        console.warn('fetchWifi error:', err);
+    }
+    const fallback = window.INITIAL_DATA?.wifi || {
+        ssid: 'Teman Kenangan',
+        password: 'KopiBikinSemangat@' + new Date().getDate()
+    };
+    updateWifiUI({ outlet: code, wifi: fallback, date: new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) });
+    return fallback;
+}
+
+function updateWifiUI(data) {
+    if (!data || !data.wifi) return;
+    const ssid = data.wifi.ssid || 'Teman Kenangan';
+    const pass = data.wifi.password || ('KopiBikinSemangat@' + new Date().getDate());
+    const dateText = data.date || new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    // 1. Update Banner Card in Store View
+    const ssidValEl = document.getElementById('wifiSsidVal');
+    const passValEl = document.getElementById('wifiPassVal');
+    const dateTextEl = document.getElementById('wifiTodayDate');
+
+    if (ssidValEl) ssidValEl.textContent = ssid;
+    if (passValEl) passValEl.textContent = pass;
+    if (dateTextEl) dateTextEl.textContent = dateText;
+
+    // 2. Update Modal in Store / Hub View
+    const modalTitleEl = document.getElementById('wifiModalTitle');
+    const modalDateEl = document.getElementById('wifiModalDate');
+    const modalSsidEl = document.getElementById('wifiModalSsid');
+    const modalPassEl = document.getElementById('wifiModalPass');
+
+    if (modalTitleEl) modalTitleEl.textContent = `Wi-Fi ${AppState.outlet?.name || 'Outlet'}`;
+    if (modalDateEl) modalDateEl.textContent = dateText;
+    if (modalSsidEl) modalSsidEl.textContent = ssid;
+    if (modalPassEl) modalPassEl.textContent = pass;
+}
+
+function copyWifiPassword() {
+    const pass = document.getElementById('wifiPassVal')?.textContent || document.getElementById('wifiModalPass')?.textContent || '';
+    if (!pass || pass === 'Memuat...') {
+        showToast('Password Wi-Fi belum siap.');
+        return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pass).then(() => {
+            showToast('✓ Password Wi-Fi disalin ke clipboard!');
+        }).catch(() => {
+            fallbackCopyText(pass);
+        });
+    } else {
+        fallbackCopyText(pass);
+    }
+}
+
+function fallbackCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showToast('✓ Password Wi-Fi disalin!');
+    } catch {
+        showToast(`Password: ${text}`);
+    }
+    document.body.removeChild(ta);
+}
+
+function initWifiFeature() {
+    if (window.INITIAL_DATA?.wifi) {
+        updateWifiUI(window.INITIAL_DATA.wifi);
+    }
+    if (AppState.outlet?.code) {
+        fetchWifi(AppState.outlet.code);
+    }
+
+    document.getElementById('copyWifiBannerBtn')?.addEventListener('click', copyWifiPassword);
+    document.getElementById('wifiModalCopyBtn')?.addEventListener('click', copyWifiPassword);
+
+    document.getElementById('wifiNavBtn')?.addEventListener('click', () => {
+        openSheet('wifiModal');
+    });
+}
+
+// =========================================================================
+// 12. HELPER FUNCTIONS & WEB HOURS CONTROLLER (Fitur Baru)
+// =========================================================================
+
+function escapeHtml(str) {
+    if (str == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(str);
+    return div.innerHTML;
+}
+
+function checkWebHoursStatusNow() {
+    if (!AppState.webHours || !AppState.webHours.enabled) {
+        return { isOpen: true, statusText: 'Buka', open: '00:00', close: '23:59', message: '' };
+    }
+
+    const openHM = AppState.webHours.open || '09:00';
+    const closeHM = AppState.webHours.close || '12:00';
+    const customMsg = AppState.webHours.custom_closed_message || '';
+
+    if (AppState.webHours.force_status === 'open') {
+        return {
+            isOpen: true,
+            statusText: `Buka (Paksa Buka Admin) • ${openHM} - ${closeHM} WIB`,
+            open: openHM,
+            close: closeHM,
+            message: customMsg
+        };
+    }
+    if (AppState.webHours.force_status === 'closed') {
+        return {
+            isOpen: false,
+            statusText: `Toko Tutup Sementara • Jam Operasional: ${openHM} - ${closeHM} WIB`,
+            open: openHM,
+            close: closeHM,
+            message: customMsg || 'Pemesanan sementara sedang ditutup oleh admin.'
+        };
+    }
+
+    try {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Jakarta',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).formatToParts(new Date());
+
+        const hour = parts.find(p => p.type === 'hour')?.value || '00';
+        const minute = parts.find(p => p.type === 'minute')?.value || '00';
+        const nowHM = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+
+        let isOpen = false;
+        if (openHM <= closeHM) {
+            isOpen = (nowHM >= openHM && nowHM < closeHM);
+        } else {
+            // Operasional melewati tengah malam
+            isOpen = (nowHM >= openHM || nowHM < closeHM);
+        }
+
+        const statusText = isOpen
+            ? `Buka Sekarang • Jam Operasional: ${openHM} - ${closeHM} WIB`
+            : `Sedang Tutup • Jam Operasional: ${openHM} - ${closeHM} WIB`;
+
+        return {
+            isOpen,
+            statusText,
+            open: openHM,
+            close: closeHM,
+            now: nowHM,
+            message: customMsg
+        };
+    } catch (e) {
+        return Object.assign({
+            isOpen: true,
+            statusText: 'Buka',
+            open: openHM,
+            close: closeHM,
+            message: customMsg
+        }, AppState.webHours);
+    }
+}
+
+function updateWebHoursBanners() {
+    const status = checkWebHoursStatusNow();
+    const hubBanner = document.getElementById('hubWebHoursBanner');
+    const storeBanner = document.getElementById('storeWebHoursBanner');
+
+    const updateBannerEl = (el, isStore) => {
+        if (!el) return;
+        el.classList.toggle('whb-open', status.isOpen);
+        el.classList.toggle('whb-closed', !status.isOpen);
+
+        const statusEl = el.querySelector('.whb-status');
+        const subEl = el.querySelector('.whb-sub');
+
+        if (statusEl) statusEl.textContent = status.statusText;
+        if (subEl) {
+            if (status.isOpen) {
+                subEl.textContent = isStore ? 'Outlet & keranjang aktif untuk checkout WhatsApp' : 'Terima pesanan sekarang via WhatsApp ♡';
+            } else {
+                subEl.textContent = status.message || `Katalog tetap bisa dilihat, pemesanan dibuka pukul ${status.open} - ${status.close} WIB`;
+            }
+        }
+    };
+
+    updateBannerEl(hubBanner, false);
+    updateBannerEl(storeBanner, true);
+}
+
+function openWebClosedModal() {
+    const status = checkWebHoursStatusNow();
+    const hoursTextEl = document.getElementById('webClosedHoursLabel') || document.getElementById('webClosedHoursText');
+    const customMsgEl = document.getElementById('webClosedMessageText') || document.getElementById('webClosedCustomMsg');
+    const badgeEl = document.getElementById('webClosedBadge');
+
+    if (hoursTextEl) {
+        hoursTextEl.textContent = `${status.open} - ${status.close} WIB`;
+    }
+    if (customMsgEl) {
+        customMsgEl.textContent = status.message || `♡ Maaf, jam operasional pemesanan Kedai Kyuti saat ini sedang tutup. Pemesanan dibuka pukul ${status.open} - ${status.close} WIB. Kamu tetap bisa melihat-lihat menu terlebih dahulu ya! ♡`;
+    }
+    if (badgeEl) {
+        badgeEl.textContent = status.isOpen ? '🟢 Buka' : '🔴 Tutup';
+    }
+
+    openSheet('webClosedModal');
+}
+
+function initWebHoursFeature() {
+    updateWebHoursBanners();
+
+    // Auto Notif: Jika toko sedang tutup, langsung munculkan notifikasi modal saat buka web
+    const status = checkWebHoursStatusNow();
+    if (!status.isOpen) {
+        setTimeout(() => {
+            openWebClosedModal();
+        }, 600);
+    }
+
+    // Re-check periodically every 30 seconds so time transitions automatically
+    setInterval(() => {
+        updateWebHoursBanners();
+        updateCartUI();
+    }, 30000);
+
+    // Close button for webClosedModal
+    document.getElementById('closeWebClosedModalBtn')?.addEventListener('click', () => {
+        closeSheet('webClosedModal');
+    });
+
+    // Clicking banners opens the info popup
+    document.getElementById('hubWebHoursBanner')?.addEventListener('click', openWebClosedModal);
+    document.getElementById('storeWebHoursBanner')?.addEventListener('click', openWebClosedModal);
+}
+
+// =========================================================================
+// 13. HALAMAN REVIEW & TESTIMONI CUSTOMER (Fitur Baru)
+// =========================================================================
+
+function initReviewsFeature() {
+    const openHubBtn = document.getElementById('openReviewsHubBtn');
+    const openNavBtn = document.getElementById('openReviewsNavBtn');
+    const closeBtn = document.querySelector('[data-close="reviewSheet"]') || document.getElementById('closeReviewSheetBtn');
+
+    const handleOpenReviews = () => {
+        openSheet('reviewSheet');
+        fetchReviews();
+    };
+
+    if (openHubBtn) openHubBtn.addEventListener('click', handleOpenReviews);
+    if (openNavBtn) openNavBtn.addEventListener('click', handleOpenReviews);
+    if (closeBtn) closeBtn.addEventListener('click', () => closeSheet('reviewSheet'));
+
+    // Toggle Write Review Form Box
+    const toggleWriteBtn = document.getElementById('toggleWriteReviewBtn');
+    const writeReviewBox = document.getElementById('writeReviewBox');
+    const closeWriteBtn = document.getElementById('closeWriteReviewBtn');
+    const cancelReviewBtn = document.getElementById('cancelReviewBtn');
+
+    if (toggleWriteBtn && writeReviewBox) {
+        toggleWriteBtn.addEventListener('click', () => {
+            const isHidden = writeReviewBox.style.display === 'none' || !writeReviewBox.style.display;
+            writeReviewBox.style.display = isHidden ? 'block' : 'none';
+            if (isHidden) {
+                document.getElementById('revInputName')?.focus();
+            }
+        });
+    }
+
+    if (closeWriteBtn && writeReviewBox) {
+        closeWriteBtn.addEventListener('click', () => {
+            writeReviewBox.style.display = 'none';
+        });
+    }
+
+    if (cancelReviewBtn && writeReviewBox) {
+        cancelReviewBtn.addEventListener('click', () => {
+            writeReviewBox.style.display = 'none';
+        });
+    }
+
+    // Interactive Star Rating Picker
+    const starPicker = document.getElementById('starRatingPicker') || document.getElementById('reviewStarPicker');
+    const starRatingLabel = document.getElementById('starRatingLabel');
+    let currentRating = 5;
+
+    const ratingDescriptions = {
+        1: '⭐ Kecewa',
+        2: '⭐⭐ Kurang Puas',
+        3: '⭐⭐⭐ Cukup Baik',
+        4: '⭐⭐⭐⭐ Puas!',
+        5: '⭐⭐⭐⭐⭐ Sangat Puas!'
+    };
+
+    if (starPicker) {
+        const starBtns = starPicker.querySelectorAll('.star-pick-btn');
+        starBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                currentRating = parseInt(btn.dataset.val || btn.dataset.star, 10) || 5;
+                if (starRatingLabel) {
+                    starRatingLabel.textContent = ratingDescriptions[currentRating] || '⭐⭐⭐⭐⭐ Sangat Puas!';
+                }
+                starBtns.forEach(b => {
+                    const s = parseInt(b.dataset.val || b.dataset.star, 10);
+                    b.classList.toggle('active', s <= currentRating);
+                });
+            });
+        });
+    }
+
+    // Shopee-Style Photo Upload & Canvas Compression
+    let currentReviewPhotoBase64 = '';
+    const photoInput = document.getElementById('revInputPhoto');
+    const photoPickLabel = document.getElementById('revPhotoPickLabel');
+    const photoPreviewWrap = document.getElementById('revPhotoPreviewWrap');
+    const photoPreviewImg = document.getElementById('revPhotoPreviewImg');
+    const photoDelBtn = document.getElementById('revPhotoDelBtn');
+
+    const compressImage = (file, maxWidth, maxHeight, quality) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width = Math.round((width * maxHeight) / height);
+                            height = maxHeight;
+                        }
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                    resolve(dataUrl);
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+    if (photoInput) {
+        photoInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            if (!file.type.match(/^image\//)) {
+                showToast('✕ File harus berupa gambar (JPG, PNG, WebP)');
+                photoInput.value = '';
+                return;
+            }
+
+            try {
+                showToast('⏳ Memproses foto pesanan...');
+                const compressed = await compressImage(file, 800, 800, 0.82);
+                currentReviewPhotoBase64 = compressed;
+                if (photoPreviewImg) photoPreviewImg.src = compressed;
+                if (photoPreviewWrap) photoPreviewWrap.style.display = 'block';
+                if (photoPickLabel) {
+                    photoPickLabel.innerHTML = `
+                        <span style="font-size:18px">🔄</span>
+                        <span style="font-size:10px;font-weight:800">Ganti Foto</span>
+                        <small style="font-size:8.5px;color:var(--text-muted)">Siap kirim</small>
+                    `;
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('✕ Gagal memproses gambar. Coba gambar lain.');
+                currentReviewPhotoBase64 = '';
+            }
+        });
+    }
+
+    if (photoDelBtn) {
+        photoDelBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            currentReviewPhotoBase64 = '';
+            if (photoInput) photoInput.value = '';
+            if (photoPreviewWrap) photoPreviewWrap.style.display = 'none';
+            if (photoPreviewImg) photoPreviewImg.src = '';
+            if (photoPickLabel) {
+                photoPickLabel.innerHTML = `
+                    <span style="font-size:20px">📷</span>
+                    <span style="font-size:10.5px;font-weight:800">+ Foto Pesanan</span>
+                    <small style="font-size:9px;color:var(--text-muted)">Kamera / Galeri</small>
+                `;
+            }
+        });
+    }
+
+    // Submit Review Form
+    const submitBtn = document.getElementById('submitReviewBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const nameInput = document.getElementById('revInputName') || document.getElementById('reviewNameInput');
+            const menuInput = document.getElementById('revInputMenu');
+            const commentInput = document.getElementById('revInputComment') || document.getElementById('reviewCommentInput');
+
+            const name = (nameInput?.value || '').trim();
+            const menu = (menuInput?.value || '').trim() || 'Menu Kopi Kenangan';
+            const comment = (commentInput?.value || '').trim();
+            const rating = currentRating || 5;
+            const outletName = AppState.outlet?.name || 'Outlet Kopi Kenangan';
+
+            if (!name || name.length < 2) {
+                showToast('Silakan isi nama kamu (minimal 2 huruf)');
+                nameInput?.focus();
+                return;
+            }
+            if (!comment || comment.length < 4) {
+                showToast('Silakan tulis ulasan kamu (minimal 4 karakter)');
+                commentInput?.focus();
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span>Mengirim ulasan...</span>';
+
+            fetch('api/reviews.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    rating: rating,
+                    menu: menu,
+                    comment: comment,
+                    outlet: outletName,
+                    photo: currentReviewPhotoBase64
+                })
+            })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        showToast('✓ Ulasan kamu berhasil dikirim! Terima kasih sahabat Kyuti ♡');
+                        if (commentInput) commentInput.value = '';
+                        if (menuInput) menuInput.value = '';
+                        currentReviewPhotoBase64 = '';
+                        if (photoInput) photoInput.value = '';
+                        if (photoPreviewWrap) photoPreviewWrap.style.display = 'none';
+                        if (photoPreviewImg) photoPreviewImg.src = '';
+                        if (photoPickLabel) {
+                            photoPickLabel.innerHTML = `
+                                <span style="font-size:20px">📷</span>
+                                <span style="font-size:10.5px;font-weight:800">+ Foto Pesanan</span>
+                                <small style="font-size:9px;color:var(--text-muted)">Kamera / Galeri</small>
+                            `;
+                        }
+                        if (writeReviewBox) writeReviewBox.style.display = 'none';
+                        fetchReviews();
+                    } else {
+                        showToast(`✕ ${res.message || 'Gagal mengirim ulasan'}`);
+                    }
+                })
+                .catch(() => {
+                    showToast('✕ Gagal menghubungi server ulasan.');
+                })
+                .finally(() => {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<span>Kirim Ulasan 🌸</span>';
+                });
+        });
+    }
+
+    // Lightbox modal close handlers
+    const closeLightboxBtn = document.getElementById('closeReviewLightboxBtn');
+    if (closeLightboxBtn) {
+        closeLightboxBtn.addEventListener('click', () => {
+            const modal = document.getElementById('reviewPhotoLightboxModal');
+            if (modal) modal.style.display = 'none';
+        });
+    }
+
+    const lightboxModal = document.getElementById('reviewPhotoLightboxModal');
+    if (lightboxModal) {
+        lightboxModal.addEventListener('click', (e) => {
+            if (e.target === lightboxModal) {
+                lightboxModal.style.display = 'none';
+            }
+        });
+    }
+}
+
+// Global function to open Review Photo in Lightbox modal
+window.openReviewPhotoLightbox = (src) => {
+    const modal = document.getElementById('reviewPhotoLightboxModal');
+    const img = document.getElementById('lightboxImg');
+    if (modal && img) {
+        img.src = src;
+        modal.style.display = 'flex';
+    }
+};
+
+function handleAdminDeleteReview(id, name) {
+    if (!id) return;
+    let code = adminPricingState?.activePasscode || sessionStorage.getItem('kyuti_admin_code') || '';
+    if (!code) {
+        code = prompt(`[Akses Khusus Admin Kedai Kyuti]\nMasukkan Passcode Admin untuk menghapus ulasan dari "${name}":`);
+        if (!code) return;
+    }
+
+    if (!confirm(`Yakin ingin menghapus permanen ulasan dari "${name}"?`)) return;
+
+    fetch('api/reviews.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Code': code
+        },
+        body: JSON.stringify({
+            action: 'delete',
+            id: id,
+            code: code
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            sessionStorage.setItem('kyuti_admin_code', code);
+            sessionStorage.setItem('kyuti_admin_auth', '1');
+            if (typeof adminPricingState !== 'undefined') {
+                adminPricingState.activePasscode = code;
+            }
+            showToast(`✓ Ulasan dari "${name}" berhasil dihapus.`);
+            fetchReviews();
+            if (typeof renderAdminReviewsList === 'function' && Array.isArray(res.reviews)) {
+                renderAdminReviewsList(res.reviews);
+            }
+        } else {
+            showToast(`✕ ${res.message || 'Gagal menghapus ulasan'}`);
+        }
+    })
+    .catch(() => {
+        showToast('✕ Terjadi kesalahan jaringan saat menghapus ulasan.');
+    });
+}
+
+function loadAdminReviewsList() {
+    const container = document.getElementById('adminReviewsList');
+    const badge = document.getElementById('adminReviewCountBadge');
+    if (!container) return;
+
+    fetch('api/reviews.php')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) return;
+            const reviews = res.reviews || [];
+            if (badge) badge.textContent = `${reviews.length} Ulasan`;
+            renderAdminReviewsList(reviews);
+        })
+        .catch(() => {
+            if (container) {
+                container.innerHTML = '<div style="text-align:center;padding:12px;color:#DC2626;font-size:11px;">✕ Gagal memuat daftar ulasan.</div>';
+            }
+        });
+}
+
+function renderAdminReviewsList(reviews) {
+    const container = document.getElementById('adminReviewsList');
+    const badge = document.getElementById('adminReviewCountBadge');
+    if (!container) return;
+
+    if (badge) badge.textContent = `${reviews.length} Ulasan`;
+
+    if (!reviews || reviews.length === 0) {
+        container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:16px;text-align:center;background:var(--bg-card);border:1px dashed var(--border-color);border-radius:var(--radius-sm)">Belum ada ulasan customer yang masuk.</div>';
+        return;
+    }
+
+    container.innerHTML = reviews.map(rev => {
+        const ratingVal = parseInt(rev.rating, 10) || 5;
+        const stars = '★'.repeat(ratingVal) + '☆'.repeat(Math.max(0, 5 - ratingVal));
+        const photoThumb = rev.photo ? `
+            <div style="margin-top:4px">
+                <img src="${escapeHtml(rev.photo)}" style="width:42px;height:42px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--border-color);cursor:pointer" alt="Foto Ulasan" onclick="window.openReviewPhotoLightbox('${escapeHtml(rev.photo)}')">
+            </div>
+        ` : '';
+
+        return `
+            <div class="admin-review-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <span style="font-weight:800;font-size:12px;color:var(--text-main)">${escapeHtml(rev.name)}</span>
+                        <span style="font-size:11px;color:#F59E0B">${stars}</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-sm admin-del-rev-btn" data-id="${escapeHtml(rev.id)}" data-name="${escapeHtml(rev.name)}" style="color:#E11D48;border-color:#FDA4AF;font-size:11px;padding:3px 8px;font-weight:800;cursor:pointer">
+                        🗑️ Hapus
+                    </button>
+                </div>
+                <div style="font-size:10.5px;color:var(--text-muted)">
+                    <span>${escapeHtml(rev.menu || 'Pesanan')}</span> • <span>${escapeHtml(rev.date || 'Baru saja')}</span> ${rev.outlet ? `• ☕ ${escapeHtml(rev.outlet)}` : ''}
+                </div>
+                <div style="font-size:11.5px;color:var(--text-main);line-height:1.4">
+                    "${escapeHtml(rev.comment)}"
+                </div>
+                ${photoThumb}
+            </div>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.admin-del-rev-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            const name = btn.dataset.name;
+            handleAdminDeleteReview(id, name);
+        });
+    });
+}
+
+function fetchReviews() {
+    const listContainer = document.getElementById('reviewsListWrap') || document.getElementById('reviewListContainer');
+    const scoreElem = document.getElementById('reviewAvgScore') || document.getElementById('reviewSummaryScore');
+    const totalElem = document.getElementById('reviewTotalCount') || document.getElementById('reviewSummaryTotal');
+
+    fetch('api/reviews.php')
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) return;
+            const stats = res.stats || {};
+            const reviews = res.reviews || [];
+
+            if (scoreElem) scoreElem.textContent = Number(stats.average || stats.average_rating || 4.9).toFixed(1);
+            if (totalElem) totalElem.textContent = `${stats.total || stats.total_reviews || reviews.length}+ Ulasan Sahabat Kyuti`;
+
+            if (listContainer) {
+                if (reviews.length === 0) {
+                    listContainer.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:12px;">Belum ada ulasan. Jadilah yang pertama memberi ulasan! ♡</div>';
+                    return;
+                }
+                listContainer.innerHTML = reviews.map(rev => {
+                    const ratingVal = parseInt(rev.rating, 10) || 5;
+                    const stars = '★'.repeat(ratingVal) + '☆'.repeat(Math.max(0, 5 - ratingVal));
+                    const initial = (rev.name || 'S').trim().charAt(0).toUpperCase();
+                    const menuText = rev.menu || rev.role || 'Sahabat Kyuti';
+                    const outletBadge = rev.outlet ? `<span class="ric-tag">☕ Outlet ${escapeHtml(rev.outlet)}</span>` : '';
+                    const dateText = rev.date || 'Baru saja';
+                    const photoHtml = rev.photo ? `
+                        <div class="ric-photos">
+                            <img src="${escapeHtml(rev.photo)}" class="ric-photo-thumb" alt="Foto Pesanan ${escapeHtml(rev.name)}" loading="lazy" onclick="window.openReviewPhotoLightbox('${escapeHtml(rev.photo)}')">
+                        </div>
+                    ` : '';
+
+                    return `
+                        <div class="review-item-card">
+                            <div class="ric-header">
+                                <div class="ric-user-info">
+                                    <div class="ric-avatar">${escapeHtml(initial)}</div>
+                                    <div class="ric-name-row">
+                                        <div class="ric-name">
+                                            <span>${escapeHtml(rev.name)}</span>
+                                            <span class="ric-badge-verified">✓ Terverifikasi</span>
+                                        </div>
+                                        <span class="ric-date">${escapeHtml(menuText)} • ${escapeHtml(dateText)}</span>
+                                    </div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <div class="ric-stars" title="${ratingVal} Bintang">${stars}</div>
+                                    <button type="button" class="ric-delete-btn" data-id="${escapeHtml(rev.id)}" data-name="${escapeHtml(rev.name)}" title="Hapus Ulasan (Admin)">🗑️</button>
+                                </div>
+                            </div>
+                            ${outletBadge}
+                            <div class="ric-comment">${escapeHtml(rev.comment)}</div>
+                            ${photoHtml}
+                        </div>
+                    `;
+                }).join('');
+
+                listContainer.querySelectorAll('.ric-delete-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const id = btn.dataset.id;
+                        const name = btn.dataset.name;
+                        handleAdminDeleteReview(id, name);
+                    });
+                });
+            }
+        })
+        .catch(() => {
+            if (listContainer) {
+                listContainer.innerHTML = '<div style="text-align:center;padding:16px;color:#DC2626;font-size:12px;">✕ Gagal memuat ulasan. Coba refresh halaman.</div>';
+            }
+        });
+}
+
+// =========================================================================
+// 14. FITUR LAGU / BGM CAFE LOFI PLAYER (Fitur Baru)
+// =========================================================================
+
+function initBgmPlayer() {
+    const bgmCfg = window.INITIAL_DATA?.bgm || {};
+    let playlist = (Array.isArray(AppState.bgm?.playlist) && AppState.bgm.playlist.length > 0)
+        ? [...AppState.bgm.playlist]
+        : (Array.isArray(bgmCfg.playlist) ? [...bgmCfg.playlist] : []);
+
+    const floatingPlayer = document.getElementById('floatingBgmPlayer');
+    const navBtn = document.getElementById('bgmNavBtn');
+
+    if (AppState.bgm?.enabled === false || bgmCfg.enabled === false) {
+        if (floatingPlayer) floatingPlayer.style.display = 'none';
+        if (navBtn) navBtn.style.display = 'none';
+    }
+
+    if (!playlist.length) return;
+
+    let currentIdx = 0;
+    let isPlaying = false;
+    let isMuted = false;
+    let currentVolume = AppState.bgm?.default_volume ?? bgmCfg.default_volume ?? 0.4;
+    let activeEngine = playlist[0]?.youtube_id ? 'youtube' : 'audio';
+
+    const audio = document.getElementById('bgmAudio');
+    const disc = document.getElementById('bgmDisc');
+    const discBtn = document.getElementById('bgmDiscBtn');
+    const navIcon = document.getElementById('bgmNavIcon');
+    const popup = document.getElementById('bgmPopup');
+    const titleEl = document.getElementById('bgmCurrentTitle');
+    const artistEl = document.getElementById('bgmCurrentArtist');
+    const playToggleBtn = document.getElementById('bgmPlayToggleBtn');
+    const playIcon = document.getElementById('bgmPlayIcon');
+    const nextBtn = document.getElementById('bgmNextBtn');
+    const prevBtn = document.getElementById('bgmPrevBtn');
+    const muteBtn = document.getElementById('bgmMuteBtn');
+    const muteIcon = document.getElementById('bgmMuteIcon');
+    const closePopupBtn = document.getElementById('bgmClosePopupBtn');
+
+    if (audio) {
+        audio.volume = currentVolume;
+    }
+
+    const setPlaybackUI = (playing) => {
+        isPlaying = !!playing;
+        if (isPlaying) {
+            disc?.classList.add('spinning');
+            if (playIcon) playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+            if (navIcon) navIcon.textContent = '🎶';
+        } else {
+            disc?.classList.remove('spinning');
+            if (playIcon) playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+            if (navIcon) navIcon.textContent = '🎵';
+        }
+    };
+
+    // =========================================================================
+    // YouTube Background Player Engine (Full Duration Playback 3-5 Mins)
+    // =========================================================================
+    let ytPlayer = null;
+    let ytReady = false;
+    let pendingPlay = false;
+
+    const initYt = () => {
+        if (ytPlayer || typeof window.YT === 'undefined' || !window.YT.Player) return;
+        const target = document.getElementById('bgmYtPlayer');
+        if (!target) return;
+
+        try {
+            const currentTrack = playlist[currentIdx];
+            ytPlayer = new window.YT.Player('bgmYtPlayer', {
+                height: '200',
+                width: '200',
+                videoId: currentTrack?.youtube_id || '6kKuzB_YOmc',
+                playerVars: {
+                    autoplay: 1,
+                    controls: 0,
+                    disablekb: 1,
+                    fs: 0,
+                    modestbranding: 1,
+                    playsinline: 1,
+                    rel: 0,
+                    enablejsapi: 1,
+                    origin: window.location.origin
+                },
+                events: {
+                    onReady: (event) => {
+                        ytReady = true;
+                        try {
+                            event.target.setVolume(Math.round(currentVolume * 100));
+                            if (isMuted) event.target.mute(); else event.target.unMute();
+                        } catch (e) {}
+                        if (pendingPlay) {
+                            pendingPlay = false;
+                            playTrack();
+                        }
+                    },
+                    onStateChange: (event) => {
+                        // 1: PLAYING, 2: PAUSED, 0: ENDED
+                        if (event.data === window.YT.PlayerState.PLAYING) {
+                            if (activeEngine === 'youtube') {
+                                if (audio) audio.pause();
+                                setPlaybackUI(true);
+                            }
+                        } else if (event.data === window.YT.PlayerState.PAUSED) {
+                            if (activeEngine === 'youtube') {
+                                setPlaybackUI(false);
+                            }
+                        } else if (event.data === window.YT.PlayerState.ENDED) {
+                            // Full song finished! Play next full song automatically
+                            setPlaybackUI(false);
+                            loadTrack(currentIdx + 1, true);
+                        }
+                    },
+                    onError: (err) => {
+                        console.warn('YouTube playback error:', err);
+                        const fallbackTrack = playlist[currentIdx];
+                        if (fallbackTrack && fallbackTrack.src && audio) {
+                            activeEngine = 'audio';
+                            audio.src = fallbackTrack.src;
+                            audio.play().catch(() => {});
+                        } else {
+                            setTimeout(() => loadTrack(currentIdx + 1, true), 1000);
+                        }
+                    }
+                }
+            });
+        } catch (e) {
+            console.warn('Could not initialize YT player:', e);
+        }
+    };
+
+    if (window.YT && window.YT.Player) {
+        initYt();
+    } else {
+        const prevOnReady = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+            if (typeof prevOnReady === 'function') prevOnReady();
+            initYt();
+        };
+    }
+
+    const updateTrackMeta = () => {
+        const track = playlist[currentIdx];
+        if (!track) return;
+        if (titleEl) titleEl.textContent = track.title || 'Musik Café';
+        if (artistEl) artistEl.textContent = track.artist || 'Kedai Kyuti';
+    };
+
+    const loadTrack = (idx, startPlay = false) => {
+        if (!playlist.length) return;
+        currentIdx = (idx + playlist.length) % playlist.length;
+        const track = playlist[currentIdx];
+        if (!track) return;
+
+        updateTrackMeta();
+
+        if (track.youtube_id) {
+            activeEngine = 'youtube';
+            if (audio) audio.pause();
+            if (ytPlayer && ytReady) {
+                try {
+                    ytPlayer.loadVideoById({
+                        videoId: track.youtube_id,
+                        startSeconds: 0
+                    });
+                    if (!startPlay) {
+                        ytPlayer.pauseVideo();
+                    }
+                } catch (e) {}
+            }
+        } else if (track.src && audio) {
+            activeEngine = 'audio';
+            if (ytPlayer && ytReady) {
+                try { ytPlayer.pauseVideo(); } catch (e) {}
+            }
+            audio.src = track.src;
+        }
+
+        if (startPlay) {
+            playTrack();
+        }
+    };
+
+    const playTrack = () => {
+        if (!playlist.length) return;
+        const track = playlist[currentIdx];
+        if (!track) return;
+
+        if (track.youtube_id) {
+            activeEngine = 'youtube';
+            if (audio) audio.pause();
+
+            if (ytPlayer && ytReady) {
+                try {
+                    ytPlayer.setVolume(Math.round(currentVolume * 100));
+                    if (isMuted) ytPlayer.mute(); else ytPlayer.unMute();
+                    const loadedUrl = ytPlayer.getVideoUrl ? (ytPlayer.getVideoUrl() || '') : '';
+                    if (!loadedUrl.includes(track.youtube_id)) {
+                        ytPlayer.loadVideoById({
+                            videoId: track.youtube_id,
+                            startSeconds: 0
+                        });
+                    } else {
+                        ytPlayer.playVideo();
+                    }
+                } catch (e) {
+                    console.warn(e);
+                }
+            } else {
+                pendingPlay = true;
+                initYt();
+                if (track.src && audio) {
+                    if (audio.src !== track.src) audio.src = track.src;
+                    audio.play().catch(() => {});
+                }
+            }
+        } else if (track.src && audio) {
+            activeEngine = 'audio';
+            if (ytPlayer && ytReady) {
+                try { ytPlayer.pauseVideo(); } catch (e) {}
+            }
+            if (audio.src !== track.src) {
+                audio.src = track.src;
+            }
+            audio.play().then(() => {
+                setPlaybackUI(true);
+            }).catch(e => {
+                setPlaybackUI(false);
+                console.warn('Audio play blocked:', e);
+            });
+        }
+    };
+
+    const pauseTrack = () => {
+        if (ytPlayer && ytReady) {
+            try { ytPlayer.pauseVideo(); } catch (e) {}
+        }
+        if (audio) {
+            audio.pause();
+        }
+        setPlaybackUI(false);
+    };
+
+    const togglePlay = () => {
+        if (isPlaying) {
+            pauseTrack();
+        } else {
+            playTrack();
+        }
+    };
+
+    // Autoplay Otomatis saat buka web tanpa harus di-play
+    const attemptAutoPlay = () => {
+        if (AppState.bgm?.enabled === false || bgmCfg.enabled === false) return;
+
+        // 1. Initial attempt: Try to play immediately
+        playTrack();
+
+        // 2. User Gesture Fallback for strict browser autoplay policies:
+        // Automatically unmute & play on the very first touch, click, or scroll anywhere
+        const interactionEvents = ['pointerdown', 'touchstart', 'touchend', 'click', 'scroll', 'keydown', 'wheel'];
+
+        const onUserGesture = () => {
+            if (!isPlaying) {
+                if (ytPlayer && ytReady) {
+                    try {
+                        if (!isMuted) ytPlayer.unMute();
+                        ytPlayer.setVolume(Math.round(currentVolume * 100));
+                        ytPlayer.playVideo();
+                    } catch (e) {}
+                }
+                playTrack();
+            }
+            if (isPlaying) {
+                interactionEvents.forEach(evt => {
+                    window.removeEventListener(evt, onUserGesture, { capture: true });
+                    document.removeEventListener(evt, onUserGesture, { capture: true });
+                });
+            }
+        };
+
+        interactionEvents.forEach(evt => {
+            window.addEventListener(evt, onUserGesture, { capture: true, passive: true });
+            document.addEventListener(evt, onUserGesture, { capture: true, passive: true });
+        });
+    };
+
+    // Hot-reload player state when changed by admin
+    window.reloadBgmPlayer = (newBgm) => {
+        if (!newBgm) return;
+        if (newBgm.enabled === false) {
+            pauseTrack();
+            if (floatingPlayer) floatingPlayer.style.display = 'none';
+            if (navBtn) navBtn.style.display = 'none';
+            return;
+        } else {
+            if (floatingPlayer) floatingPlayer.style.display = 'block';
+            if (navBtn) navBtn.style.display = 'inline-flex';
+        }
+        if (newBgm.default_volume !== undefined) {
+            currentVolume = newBgm.default_volume;
+            if (audio) audio.volume = currentVolume;
+            if (ytPlayer && ytReady) {
+                try { ytPlayer.setVolume(Math.round(currentVolume * 100)); } catch (e) {}
+            }
+        }
+        if (Array.isArray(newBgm.playlist) && newBgm.playlist.length > 0) {
+            playlist = [...newBgm.playlist];
+            currentIdx = 0;
+            loadTrack(0, isPlaying);
+        }
+    };
+
+    // Initial track load & autoplay
+    loadTrack(0, false);
+    attemptAutoPlay();
+
+    // Disc click toggles popup drawer & plays if not playing
+    discBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popup) {
+            const isShown = popup.style.display !== 'none';
+            popup.style.display = isShown ? 'none' : 'block';
+        }
+        if (!isPlaying) {
+            playTrack();
+        }
+    });
+
+    // Topnav BGM icon toggles playback
+    navBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePlay();
+        if (popup) popup.style.display = 'block';
+    });
+
+    // Play/Pause button
+    playToggleBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePlay();
+    });
+
+    // Next track
+    nextBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        loadTrack(currentIdx + 1, isPlaying);
+    });
+
+    // Previous track
+    prevBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        loadTrack(currentIdx - 1, isPlaying);
+    });
+
+    // Mute toggle
+    muteBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        isMuted = !isMuted;
+        if (audio) audio.muted = isMuted;
+        if (ytPlayer && ytReady) {
+            try {
+                if (isMuted) ytPlayer.mute(); else ytPlayer.unMute();
+            } catch (e) {}
+        }
+        if (muteIcon) muteIcon.textContent = isMuted ? '🔇' : '🔊';
+    });
+
+    // Close mini popup
+    closePopupBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (popup) popup.style.display = 'none';
+    });
+
+    // Native audio finished -> automatically play next track
+    if (audio) {
+        audio.addEventListener('playing', () => {
+            if (activeEngine === 'audio') setPlaybackUI(true);
+        });
+        audio.addEventListener('pause', () => {
+            if (activeEngine === 'audio') setPlaybackUI(false);
+        });
+        audio.addEventListener('ended', () => {
+            if (activeEngine === 'audio') {
+                setPlaybackUI(false);
+                loadTrack(currentIdx + 1, true);
+            }
+        });
+    }
+
+    // Close popup on outside click
+    document.addEventListener('click', (e) => {
+        if (popup && popup.style.display !== 'none' && !popup.contains(e.target) && !discBtn?.contains(e.target) && !navBtn?.contains(e.target)) {
+            popup.style.display = 'none';
+        }
+    });
+}
+
+// Initial Boot
+document.addEventListener('DOMContentLoaded', () => {
+    updateOutletHeader();
+    renderMenu();
+    updateCartUI();
+    checkWelcomePopup();
+    initAdminPricingFeature();
+    initWifiFeature();
+    initWebHoursFeature();
+    initReviewsFeature();
+    initBgmPlayer();
+});

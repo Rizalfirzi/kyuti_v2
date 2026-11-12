@@ -1,0 +1,744 @@
+<?php
+/**
+ * Kedai Kyuti - Central Application Configuration (PHP Native)
+ * Domain: kedaikyuti.my.id
+ * Brand: Kedai Kyuti (JASDOR KOPI KENANGAN)
+ * 
+ * Pengaturan Lengkap:
+ * 1. Branding, Nama Web, Logo & Bio Links
+ * 2. Warna Tema Pink Pastel / Rose Chic
+ * 3. Jam Operasional Outlet (Otomatis WIB & Manual Override)
+ * 4. Ketersediaan Stok Real-Time
+ * 5. Formula Harga: (Harga Asli - 50% + Fee)
+ *    - Fee default (+5.000)
+ *    - Fee per kategori (misal: Food +4.500, Minuman +5.000)
+ *    - Fee khusus per menu (misal: Kopi Kenangan Mantan +6.000)
+ * 6. Fee Pesanan Satuan 1 pcs (+2.000) & Kantung Belanja Plastik (+1.000)
+ * 7. Paket Menu Bundling & Menu Custom
+ */
+
+// Set Timezone ke Waktu Indonesia Barat (WIB)
+date_default_timezone_set('Asia/Jakarta');
+
+define('ROOT_PATH', __DIR__);
+
+// Cache directory
+$cacheDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'kedaikyuti_cache';
+define('CACHE_PATH', $cacheDir);
+if (!is_dir(CACHE_PATH)) {
+    @mkdir(CACHE_PATH, 0777, true);
+}
+
+$config = [
+    'app_name' => 'Kedai Kyuti',
+    'app_domain' => 'kedaikyuti.my.id',
+    'app_env' => 'production',
+
+    // =========================================================================
+    // 1. BRANDING, NAMA WEB & BIO PROFILE (Revisi Poin 1, 2, 5)
+    // =========================================================================
+    'store' => [
+        'name' => 'Kedai Kyuti',
+        'domain' => 'kedaikyuti.my.id',
+        'tagline' => 'JASDOR KOPI KENANGAN',
+        
+        // Teks Bio Header (Landing Hub View)
+        'bio_title' => '୨୧ Kedai Kyuti ୨୧',
+        'bio_badge' => '🌸 JASDOR KOPI KENANGAN 🌸',
+        'bio_quote' => '♡ your little corner for daily food & beverage deals.',
+        'bio_desc' => 'fast response, friendly prices, and service made with love ♡',
+
+        // LOGO:
+        'logo_text' => '୨୧',
+        'logo_image' => 'assets/img/logo/kyuti.jpeg', 
+
+        // HERO BANNER DI HALAMAN MENU
+        'hero_tag' => '✨ Live Inventory Sync',
+        'hero_title' => 'Pricelist Kopi Kenangan',
+        'hero_desc' => 'Pilih outlet terdekat untuk cek stok menu real-time dan pesan langsung via WhatsApp dengan harga hemat!',
+
+        // KONTAK ORDER WHATSAPP & SOSIAL MEDIA (Poin 5)
+        'admin_phone' => '628972276154',
+        'order_prefix' => 'KYUTI',
+        'default_outlet' => 'LA.CODEFIN',
+
+        'social_links' => [
+            'wa' => 'https://wa.me/628972276154',
+            'tele_testi' => 'https://t.me/kedaikyuti',
+            'x_twitter' => 'https://x.com/lolaloliyo?s=11',
+            'wa_channel' => 'https://whatsapp.com/channel/0029VbDgR1s6BIEb4d0JWl26',
+        ],
+
+        // Menu yang hanya tersedia ukuran Regular saja (tidak ada ukuran Large)
+        'regular_only_items' => [
+            'Butterscotch Sea Salt Crumble',
+            'butterscotchseasaltcrumble',
+        ],
+    ],
+
+    // =========================================================================
+    // 2. DESIGN & WARNA TEMA PINK PASTEL (Revisi Poin 3)
+    // =========================================================================
+    'theme' => [
+        // Warna Utama: Pink Pastel Aesthetic & Rose Feminine
+        'primary_color' => '#F472B6',      // Pink Pastel Elegan
+        'primary_dark' => '#DB2777',       // Rose Pink Deep untuk teks/tombol
+        'primary_light' => '#FDF2F4',      // Soft Pink Tint
+        
+        // Warna Aksen & Badge
+        'accent_color' => '#FB7185',       // Rose Accent
+        'gold_color' => '#F59E0B',
+        'gold_light' => '#FEF3C7',
+        
+        // Warna Background Halaman (Light Mode)
+        'bg_page' => '#FFF5F7',            // Pastel Pink Soft Creamy
+        'bg_card' => '#FFFFFF',            // Kartu Putih Bersih
+        'bg_card_subtle' => '#FCE7F3',     // Kartu Aksen Pink Halus
+        'border_color' => '#FBCFE8',       // Garis Border Pastel
+    ],
+
+    // =========================================================================
+    // 3. PENGATURAN BIAYA TAMBAHAN (Revisi Poin 8 & 10)
+    // =========================================================================
+    'fees' => [
+        // Fee jika pesanan hanya 1 pcs / satuan (Default 0 per revisi client)
+        'single_item_fee' => 0,
+
+        // Pilihan kantung belanja plastik (Poin 10: +1.000)
+        'plastic_bag_fee' => 1000,
+    ],
+
+    // =========================================================================
+    // 4. PENGATURAN HARGA & FEE FORMULA (Revisi Poin 7)
+    // Formula: (Harga Asli Kopken - 50% + Fee)
+    // =========================================================================
+    'pricing' => [
+        // Diskon persen dari harga asli outlet (default: 50%)
+        'discount_percent' => 50,
+
+        // Fee default per item jika tidak diatur di kategori/menu (contoh: +5.000)
+        'default_markup' => 5000,
+
+        // Fee per Kategori (Contoh: Makanan/Food +4.500, Minuman +5.000)
+        'category_markups' => [
+            'Coffee' => 5000,
+            'Non Coffee' => 5000,
+            'Frappe' => 5000,
+            'Food' => 4500,
+            'Minuman' => 5000,
+            'Makanan' => 4500,
+            'Bundling' => 0,
+        ],
+
+        // Fee khusus per Menu (Contoh: Kopi Kenangan Mantan +6.000)
+        // Format: 'Nama Menu' atau 'key_menu' => fee_tambahan
+        'item_markup_overrides' => [
+            'Kopi Kenangan Mantan' => 6000,  // Kopi Kenangan Mantan +6.000
+            'kopikenanganmantan' => 6000,
+        ],
+
+        // Override Harga Tetap Manual (jika ada menu yang ingin dipatok harga fix)
+        'price_overrides' => [
+            // 'Kopi Kenangan Mantan' => 15000,
+        ],
+    ],
+
+    // =========================================================================
+    // =========================================================================
+    // 5. MENU BUNDLING HEMAT (Revisi Paket Bundling Client)
+    // =========================================================================
+    'bundling_items' => [
+        [
+            'key' => 'bundle_2_cup_large',
+            'name' => 'PAKET BUNDLING 2 CUP LARGE',
+            'category' => 'Bundling',
+            'price' => 33000,
+            'normalPrice' => 50000,
+            'desc' => 'Pilih 2 menu bebas dari pilihan minuman size large yang tersedia di foto! ♡ Bisa mix rasa favoritmu sesuai selera🥤💗',
+            'img' => 'assets/img/bundling/PAKET BUNDLING 2 CUP LARGE.jpeg',
+            'tag' => '2 CUP LARGE',
+            'size' => 'Large',
+            'isSoldOut' => false,
+            'slots' => [
+                [
+                    'label' => 'Minuman 1 (Large)',
+                    'options' => [
+                        'Kenangan Milk Tea',
+                        'Raspberry Hibiscus',
+                        'Thai Tea Loaded',
+                        'Butterscotch Aren Latte',
+                        'Americano',
+                        'Kopi Kenangan Mantan',
+                        'Taro Milk',
+                        'Taro Cloud Milk Tea',
+                        'Spanish Latte',
+                        'Pistachio Aren Latte'
+                    ]
+                ],
+                [
+                    'label' => 'Minuman 2 (Large)',
+                    'options' => [
+                        'Kenangan Milk Tea',
+                        'Raspberry Hibiscus',
+                        'Thai Tea Loaded',
+                        'Butterscotch Aren Latte',
+                        'Americano',
+                        'Kopi Kenangan Mantan',
+                        'Taro Milk',
+                        'Taro Cloud Milk Tea',
+                        'Spanish Latte',
+                        'Pistachio Aren Latte'
+                    ]
+                ],
+            ],
+            'options' => [
+                'ices' => ['Normal Ice', 'Less Ice'],
+                'sugars' => ['Normal Sugar', 'Less Sugar (50%)', 'No Sugar'],
+            ]
+        ],
+        [
+            'key' => 'bundle_2_frappe',
+            'name' => 'PAKET BUNDLING 2 FRAPPE',
+            'category' => 'Bundling',
+            'price' => 33000,
+            'priceLabel' => 'Mulai dari Rp33.000',
+            'normalPrice' => 56000,
+            'desc' => 'Pilih paket bundling frappe ukuran reguler sesuai kombinasi menu yang tersedia di foto! ♡ Tersedia 8 pilihan paket dengan perpaduan rasa favoritmu. Tinggal pilih paket yang paling kamu suka! 🍵💗',
+            'img' => 'assets/img/bundling/PAKET BUNDLING 2 FRAPPE.jpeg',
+            'tag' => '2 FRAPPE REGULER',
+            'size' => 'Reguler',
+            'isSoldOut' => false,
+            'slots' => [
+                [
+                    'label' => 'Pilih Paket Frappe (Reguler)',
+                    'type' => 'variant_price',
+                    'options' => [
+                        ['name' => 'Kopi Kenangan Mantan + Matcha Kenangan Frappe', 'price' => 36000],
+                        ['name' => 'Dutch Choco Kenangan + Butterscotch Kenangan', 'price' => 36000],
+                        ['name' => 'Dutch Choco Kenangan + Kopi Kenangan Mantan', 'price' => 35000],
+                        ['name' => 'Dutch Choco Kenangan + Vanilla Kenangan Frappe', 'price' => 36000],
+                        ['name' => 'Matcha Kenangan Frappe + Vanilla Kenangan Frappe', 'price' => 35000],
+                        ['name' => 'Kopi Kenangan Mantan + Butterscotch Kenangan', 'price' => 35000],
+                        ['name' => 'Kopi Kenangan Mantan + Vanilla Kenangan Frappe', 'price' => 33000],
+                        ['name' => 'Butterscotch Kenangan + Vanilla Kenangan Frappe', 'price' => 35000],
+                    ]
+                ]
+            ],
+            'options' => [
+                'ices' => ['Normal Ice', 'Less Ice'],
+                'sugars' => ['Normal Sugar', 'Less Sugar (50%)', 'No Sugar'],
+            ]
+        ],
+        [
+            'key' => 'promo_minuman_special',
+            'name' => 'PROMO MINUMAN SPECIAL',
+            'category' => 'Bundling',
+            'price' => 13000,
+            'priceLabel' => 'Mulai dari Rp13.000',
+            'normalPrice' => 19000,
+            'desc' => 'Lagi pengen minuman favorit dengan harga lebih hemat? ♡ Yuk, manfaatkan promo spesial ini! Hanya tersedia ukuran reguler. Pilih rasa favoritmu sebelum kehabisan 💖',
+            'img' => 'assets/img/bundling/PROMO MINUMAN SPECIAL.jpeg',
+            'tag' => 'PROMO SPESIAL',
+            'size' => 'Reguler',
+            'isSoldOut' => false,
+            'slots' => [
+                [
+                    'label' => 'Pilih Minuman Promo (Reguler)',
+                    'type' => 'variant_price',
+                    'options' => [
+                        ['name' => 'Kopi Kenangan Mantan', 'price' => 13000],
+                        ['name' => 'Toffee Nut Latte', 'price' => 13000],
+                        ['name' => 'Spanish Latte', 'price' => 13000],
+                        ['name' => 'Pistachio Aren Latte', 'price' => 13000],
+                        ['name' => 'Americano', 'price' => 13000],
+                        ['name' => 'Babyccino', 'price' => 13000],
+                        ['name' => 'OG Thai Tea', 'price' => 13000],
+                        ['name' => 'Taro Milk', 'price' => 13000],
+                        ['name' => 'Taro Cloud Milk Tea', 'price' => 13000],
+                        ['name' => 'Butterscotch Aren Latte', 'price' => 14000],
+                        ['name' => 'Raspberry Hibiscus', 'price' => 14000],
+                    ]
+                ]
+            ],
+            'options' => [
+                'ices' => ['Normal Ice', 'Less Ice'],
+                'sugars' => ['Normal Sugar', 'Less Sugar (50%)', 'No Sugar'],
+            ]
+        ],
+        [
+            'key' => 'bundle_hemat_3_item',
+            'name' => 'PAKET HEMAT 3 ITEM',
+            'category' => 'Bundling',
+            'price' => 35000,
+            'normalPrice' => 65000,
+            'desc' => 'Pilih 3 item bebas dari menu yang tersedia di foto! Bisa mix makanan dan minuman, atau pilih menu yang sama sesuai selera ♡',
+            'img' => 'assets/img/bundling/PAKET HEMAT 3 ITEM.jpeg',
+            'tag' => 'HEMAT 3 ITEM',
+            'isSoldOut' => false,
+            'slots' => [
+                [
+                    'label' => 'Item 1 (Minuman / Makanan)',
+                    'categorized' => true,
+                    'groups' => [
+                        '🥤 Minuman' => [
+                            'Americano', 'Fresh Lemonade', 'Raspberry Hibiscus', 'Lemon Black Tea',
+                            'OG Thai Tea', 'Taro Cloud Milk Tea', 'Spanish Latte', 'Babyccino',
+                            'Pistachio Aren Latte', 'Kopi Kenangan Mantan', 'Taro Milk'
+                        ],
+                        '🥐 Makanan' => [
+                            'Classic Peanut Butter Panini', 'Butter Croissant', 'Salt Bread Sausage',
+                            'Salt Bread Choco Butter', 'Friend Chip Cookie', 'Choco Chip Cookie',
+                            'Chocolate Croissant', 'Bananachoco Soft Bake', 'Sweet Honey Soft Bake',
+                            'Oatmeal Raisin Soft Bake', 'Chocolate Donut', 'Donut Almond',
+                            'Double Choco Bagel', 'Vanilla Choux Puff', 'Strawberry Choux Puff',
+                            'Chocolate Choux Puff', 'Bambang Choco Cheese Toast', 'Adam Ayam Toast',
+                            'Triple Cheese Bagel', 'Wahyu Sapi Toast', 'Roti Srikaya'
+                        ]
+                    ]
+                ],
+                [
+                    'label' => 'Item 2 (Minuman / Makanan)',
+                    'categorized' => true,
+                    'groups' => [
+                        '🥤 Minuman' => [
+                            'Americano', 'Fresh Lemonade', 'Raspberry Hibiscus', 'Lemon Black Tea',
+                            'OG Thai Tea', 'Taro Cloud Milk Tea', 'Spanish Latte', 'Babyccino',
+                            'Pistachio Aren Latte', 'Kopi Kenangan Mantan', 'Taro Milk'
+                        ],
+                        '🥐 Makanan' => [
+                            'Classic Peanut Butter Panini', 'Butter Croissant', 'Salt Bread Sausage',
+                            'Salt Bread Choco Butter', 'Friend Chip Cookie', 'Choco Chip Cookie',
+                            'Chocolate Croissant', 'Bananachoco Soft Bake', 'Sweet Honey Soft Bake',
+                            'Oatmeal Raisin Soft Bake', 'Chocolate Donut', 'Donut Almond',
+                            'Double Choco Bagel', 'Vanilla Choux Puff', 'Strawberry Choux Puff',
+                            'Chocolate Choux Puff', 'Bambang Choco Cheese Toast', 'Adam Ayam Toast',
+                            'Triple Cheese Bagel', 'Wahyu Sapi Toast', 'Roti Srikaya'
+                        ]
+                    ]
+                ],
+                [
+                    'label' => 'Item 3 (Minuman / Makanan)',
+                    'categorized' => true,
+                    'groups' => [
+                        '🥤 Minuman' => [
+                            'Americano', 'Fresh Lemonade', 'Raspberry Hibiscus', 'Lemon Black Tea',
+                            'OG Thai Tea', 'Taro Cloud Milk Tea', 'Spanish Latte', 'Babyccino',
+                            'Pistachio Aren Latte', 'Kopi Kenangan Mantan', 'Taro Milk'
+                        ],
+                        '🥐 Makanan' => [
+                            'Classic Peanut Butter Panini', 'Butter Croissant', 'Salt Bread Sausage',
+                            'Salt Bread Choco Butter', 'Friend Chip Cookie', 'Choco Chip Cookie',
+                            'Chocolate Croissant', 'Bananachoco Soft Bake', 'Sweet Honey Soft Bake',
+                            'Oatmeal Raisin Soft Bake', 'Chocolate Donut', 'Donut Almond',
+                            'Double Choco Bagel', 'Vanilla Choux Puff', 'Strawberry Choux Puff',
+                            'Chocolate Choux Puff', 'Bambang Choco Cheese Toast', 'Adam Ayam Toast',
+                            'Triple Cheese Bagel', 'Wahyu Sapi Toast', 'Roti Srikaya'
+                        ]
+                    ]
+                ],
+            ],
+            'options' => [
+                'ices' => ['Normal Ice', 'Less Ice'],
+                'sugars' => ['Normal Sugar', 'Less Sugar (50%)', 'No Sugar'],
+            ]
+        ],
+    ],
+
+    // =========================================================================
+    // 5B. ADDONS OPSIONAL (TOPPING RESMI KOPI KENANGAN - Boleh Lebih Dari Satu)
+    // =========================================================================
+    'addons' => [
+        [
+            'id' => 'topping',
+            'name' => 'Topping',
+            'hint' => 'opsional, boleh lebih dari satu',
+            'values' => [
+                ['id' => 'espresso_kenangan', 'text' => 'Espresso Shot Kenangan Blend', 'price' => 6000],
+                ['id' => 'espresso_juwara', 'text' => 'Espresso Shot Juwara Beans', 'price' => 6000],
+                ['id' => 'golden_boba', 'text' => 'Golden Boba', 'price' => 6000],
+                ['id' => 'grass_jelly', 'text' => 'Grass Jelly', 'price' => 6000],
+                ['id' => 'oreo', 'text' => 'Oreo', 'price' => 6000],
+                ['id' => 'whipped_cream_choco', 'text' => 'Whipped Cream Chocolate', 'price' => 6000],
+                ['id' => 'whipped_cream_vanilla', 'text' => 'Whipped Cream Vanilla', 'price' => 6000],
+                ['id' => 'caramel_crumble', 'text' => 'Caramel Crumble', 'price' => 6000],
+                ['id' => 'gula_aren', 'text' => 'Gula Aren', 'price' => 6000],
+            ],
+        ],
+    ],
+
+    // =========================================================================
+    // 6. JAM OPERASIONAL & DAFTAR OUTLET PREMIUM
+    // =========================================================================
+    'outlets' => [
+        'auto_time_check' => true,
+        'hours_override' => [],
+        'force_status' => [],
+
+        // Daftar Outlet Premium yang dikonfirmasi Klien
+        'premium_list' => [
+            'buaran serpong',
+            'bintaro sektor 9',
+            'galuh mas karawang',
+            'gandaria kramat pela',
+            'matraman',
+            'sopo del',
+            'kota baru jogja',
+            'jemursari',
+            'ahmad yani surabaya',
+            'cikajang',
+            'sahid sudirman',
+            'sahid sudirmam',
+            'ahmad muksin tenggarong',
+            'danau semayang',
+            'ruko mangga berau',
+            'pecenongan',
+            'rawa belong',
+            'summarecon bogor',
+            'keprabon',
+            'summarecon digital center',
+            'cihampelas walk',
+            'pim 2',
+            'pim 3',
+            'teras kota',
+        ],
+
+        // Kode Outlet Premium terdaftar
+        'premium_codes' => [
+            'KK.KWG.GLHMAS',       // Galuh Mas Karawang
+            'KK.TNG.RKBARNSRPG',   // Buaran Serpong
+            'KK.TNG.BNTROSKTR9',   // Bintaro Sektor 9
+            'KK.JKT.GNDRKRMTPL',   // Gandaria Kramat Pela
+            'KK.JKT.RKMTRMNJT',    // Ruko Matraman Jakarta Timur
+            'SOPODEL',             // Sopo Del Tower
+            'KK.YYK.BNTRBDYA',     // Kota Baru Jogja
+            'KK.SBY.JMSRI',        // Jemursari Surabaya
+            'SBY.AHMDYNMJO',       // Ahmad Yani Surabaya
+            'KK.JKT.CKJNG',        // Cikajang
+            'SAHID',               // Sahid Sudirman
+            'KK.TRG.RKAMDMKSIN',   // Ruko Ahmad Muksin Tenggarong
+            'DOCOKK.TRG.DNUSMYNG', // Danau Semayang Tenggarong
+            'KK.TNR.RKMNGABRUKT',  // Ruko Mangga Berau
+            'KK.JKT.RKPCNGAN',     // Ruko Pecenongan Jakarta Pusat
+            'KK.JKT.RWBLNGJKT',    // Rawa Belong Jakarta
+            'KK.BGR.SMBGR',        // Summarecon Bogor
+            'KK.SKT.KPRABN',       // Keprabon Surakarta
+            'TGR.SDCSERPONG',      // Summarecon Digital Center (SDC Serpong)
+            'BDG.CHMPLSWK',        // Cihampelas Walk
+            'JKT.CFPIM2',          // PIM 2
+            'JKT.FCPIM3',          // Food Court PIM 3
+            'TGR.TERASKOTA',       // Teras Kota
+        ],
+    ],
+
+    // =========================================================================
+    // 7. PENGATURAN STOK MENU
+    // =========================================================================
+    'stock' => [
+        'ttl_seconds' => 60,
+        'overrides' => [],
+    ],
+
+    // External Live API Endpoint
+    'api_base_url' => 'https://tixandcoffee.developerngantuk.my.id/api',
+    'api_timeout' => 15,
+    'cache_ttl' => [
+        'outlets' => 1800,
+        'menu' => 60,
+    ],
+
+    // =========================================================================
+    // 8. AKSES ADMIN / REDEEM CODE
+    // =========================================================================
+    'admin' => [
+        'passcode' => 'WHOSUTII26', // Redeem Code / Passcode untuk akses Admin Fee di website
+    ],
+
+    // =========================================================================
+    // 9. DATABASE CLOUD UNTUK VERCEL (100% FREE TIER)
+    // =========================================================================
+    // Mendukung Vercel KV / Upstash Redis REST API.
+    // Otomatis membaca Environment Variables di Vercel:
+    // - KV_REST_API_URL / UPSTASH_REDIS_REST_URL
+    // - KV_REST_API_TOKEN / UPSTASH_REDIS_REST_TOKEN
+    'database' => [
+        'kv_url' => getenv('KV_REST_API_URL') ?: getenv('UPSTASH_REDIS_REST_URL') ?: '',
+        'kv_token' => getenv('KV_REST_API_TOKEN') ?: getenv('UPSTASH_REDIS_REST_TOKEN') ?: '',
+    ],
+
+    // =========================================================================
+    // 10. JAM OPERASIONAL WEB (JASA TITIP ORDER KEDAI KYUTI)
+    // Default: 09.00 - 12.00 WIB (Bisa disetting sendiri oleh admin di website ⚙️)
+    // =========================================================================
+    'web_hours' => [
+        'enabled' => true,
+        'open' => '09:00',
+        'close' => '12:00',
+        'closed_message' => '♡ Maaf, jam operasional pemesanan Kedai Kyuti saat ini sedang tutup. Jam layanan pemesanan kami adalah pukul 09.00 - 12.00 WIB. Kamu tetap bisa melihat-lihat menu terlebih dahulu ya! ♡',
+        'allow_browsing' => true,
+        'force_status' => 'auto', // 'auto', 'open', 'closed'
+    ],
+
+    // =========================================================================
+    // 11. BACKGROUND MUSIC (BGM) PLAYLIST (Trending TikTok & Pop Viral Indonesia)
+    // =========================================================================
+    'bgm' => [
+        'enabled' => true,
+        'autoplay_hint' => true,
+        'default_volume' => 0.4,
+        'playlist' => [
+            [
+                'title' => 'Negoro Angin (Trending TikTok ♫)',
+                'artist' => 'Denny Caknan',
+                'youtube_id' => '6kKuzB_YOmc',
+                'src' => '',
+            ],
+            [
+                'title' => 'Sesi Potret',
+                'artist' => 'eńau ft. Ari Lesmana',
+                'youtube_id' => 'CSKr9seKdgI',
+                'src' => '',
+            ],
+            [
+                'title' => 'Dunia Yang Nanti',
+                'artist' => 'Raim Laode',
+                'youtube_id' => 'awWKxGftWh4',
+                'src' => '',
+            ],
+            [
+                'title' => 'bergema sampai selamanya',
+                'artist' => 'Nadhif Basalamah',
+                'youtube_id' => 'gvunApwKIiY',
+                'src' => '',
+            ],
+            [
+                'title' => 'Teh Hijau',
+                'artist' => 'Tulus',
+                'youtube_id' => 'RO75uUZiAw0',
+                'src' => '',
+            ],
+            [
+                'title' => 'Jatuh Suka',
+                'artist' => 'Tulus',
+                'youtube_id' => '2uJut6USftQ',
+                'src' => '',
+            ],
+            [
+                'title' => 'Amnesia',
+                'artist' => 'Al-Ghazali',
+                'youtube_id' => '6iolyINA45I',
+                'src' => '',
+            ],
+            [
+                'title' => 'Iqro\'',
+                'artist' => 'Raim Laode',
+                'youtube_id' => '46pNDkp4KQU',
+                'src' => '',
+            ],
+            [
+                'title' => 'Terbelah Jadi Dua',
+                'artist' => 'Gloria Jessica',
+                'youtube_id' => 'RS4fnhf_LHc',
+                'src' => '',
+            ],
+            [
+                'title' => 'Separuh Aku',
+                'artist' => 'Noah',
+                'youtube_id' => 'iAP_EyZMvw0',
+                'src' => '',
+            ],
+            [
+                'title' => 'Titik Nadir',
+                'artist' => 'Kahitna',
+                'youtube_id' => 'QGZ1tR-xMLo',
+                'src' => '',
+            ],
+            [
+                'title' => 'Bersenja Gurau',
+                'artist' => 'Raim Laode',
+                'youtube_id' => 'jmvX6XyvCy0',
+                'src' => '',
+            ],
+            [
+                'title' => 'Monolog',
+                'artist' => 'Pamungkas',
+                'youtube_id' => 'IrjzeNspw78',
+                'src' => '',
+            ],
+            [
+                'title' => 'Ini Abadi',
+                'artist' => 'Perunggu',
+                'youtube_id' => 'oofq7T8cb1E',
+                'src' => '',
+            ],
+            [
+                'title' => 'Bahagia Lagi',
+                'artist' => 'Piche Kota',
+                'youtube_id' => 'S_bSlK_yZoo',
+                'src' => '',
+            ],
+        ],
+    ],
+];
+
+// =========================================================================
+// MERGE DYNAMIC PRICING DARI ADMIN PANEL (Vercel KV Cloud, data/pricing_settings.json, /tmp cache, & Cookie fallback)
+// =========================================================================
+// 1. Check Cloud Database (Vercel KV / Upstash Redis via SimpleRedis: Socket & REST)
+require_once __DIR__ . '/includes/SimpleRedis.php';
+$simpleRedis = new SimpleRedis();
+
+$dynamicData = null;
+if ($simpleRedis->isConnected()) {
+    $tempKvCache = (defined('CACHE_PATH') ? CACHE_PATH : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'kedaikyuti_cache') . DIRECTORY_SEPARATOR . 'kv_pricing_cache.json';
+    if (file_exists($tempKvCache) && (time() - filemtime($tempKvCache)) < 5) {
+        $dynamicData = json_decode(@file_get_contents($tempKvCache), true);
+    } else {
+        $cachedVal = $simpleRedis->get('pricing_settings');
+        if (!empty($cachedVal)) {
+            $parsedRedis = is_string($cachedVal) ? json_decode($cachedVal, true) : $cachedVal;
+            if (is_array($parsedRedis)) {
+                $dynamicData = $parsedRedis;
+                $tempDir = dirname($tempKvCache);
+                if (!is_dir($tempDir)) @mkdir($tempDir, 0777, true);
+                @file_put_contents($tempKvCache, json_encode($dynamicData));
+            }
+        }
+    }
+}
+
+// 2. Fallback to Local Files (/tmp cache on Vercel or data/pricing_settings.json)
+if ($dynamicData === null) {
+    $dynamicPricingCandidates = [
+        (defined('CACHE_PATH') ? CACHE_PATH : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'kedaikyuti_cache') . DIRECTORY_SEPARATOR . 'pricing_settings.json',
+        __DIR__ . '/data/pricing_settings.json',
+    ];
+
+    foreach ($dynamicPricingCandidates as $dynFile) {
+        if (file_exists($dynFile)) {
+            $parsed = json_decode(@file_get_contents($dynFile), true);
+            if (is_array($parsed)) {
+                $dynamicData = $parsed;
+                break;
+            }
+        }
+    }
+}
+
+// Fallback to Cookie if present (ensures seamless instant sync on serverless platforms like Vercel)
+if ($dynamicData === null && !empty($_COOKIE['kyuti_custom_pricing'])) {
+    $rawCookie = $_COOKIE['kyuti_custom_pricing'];
+    $parsedCookie = json_decode(urldecode($rawCookie), true);
+    if (!is_array($parsedCookie)) {
+        $parsedCookie = json_decode($rawCookie, true);
+    }
+    if (is_array($parsedCookie)) {
+        $dynamicData = $parsedCookie;
+    }
+}
+
+if (is_array($dynamicData)) {
+    if (isset($dynamicData['default_markup'])) {
+        $config['pricing']['default_markup'] = max(0, (float)$dynamicData['default_markup']);
+    }
+    if (isset($dynamicData['category_markups']) && is_array($dynamicData['category_markups'])) {
+        $config['pricing']['category_markups'] = $dynamicData['category_markups'];
+    }
+    // CRITICAL BUGFIX: Direct assignment, NOT array_merge!
+    // When an admin deletes an item override, $dynamicData['item_markup_overrides'] is [] (empty).
+    // array_merge with the default array would wrongly restore the deleted item override.
+    if (isset($dynamicData['item_markup_overrides']) && is_array($dynamicData['item_markup_overrides'])) {
+        $config['pricing']['item_markup_overrides'] = $dynamicData['item_markup_overrides'];
+    }
+    if (isset($dynamicData['single_item_fee'])) {
+        $config['fees']['single_item_fee'] = max(0, (float)$dynamicData['single_item_fee']);
+    }
+    if (isset($dynamicData['plastic_bag_fee'])) {
+        $config['fees']['plastic_bag_fee'] = max(0, (float)$dynamicData['plastic_bag_fee']);
+    }
+    if (isset($dynamicData['bundling_status']) && is_array($dynamicData['bundling_status'])) {
+        $config['pricing']['bundling_status'] = $dynamicData['bundling_status'];
+    }
+    if (isset($dynamicData['disabled_bundling_options']) && is_array($dynamicData['disabled_bundling_options'])) {
+        $config['pricing']['disabled_bundling_options'] = $dynamicData['disabled_bundling_options'];
+    }
+    if (!empty($dynamicData['admin_passcode'])) {
+        $config['admin']['passcode'] = trim((string)$dynamicData['admin_passcode']);
+    }
+    if (isset($dynamicData['web_hours']) && is_array($dynamicData['web_hours'])) {
+        $config['web_hours'] = array_merge($config['web_hours'] ?? [], $dynamicData['web_hours']);
+    }
+    if (isset($dynamicData['bgm']) && is_array($dynamicData['bgm'])) {
+        $config['bgm'] = array_merge($config['bgm'] ?? [], $dynamicData['bgm']);
+    }
+    if (isset($dynamicData['addons']) && is_array($dynamicData['addons'])) {
+        $config['addons'] = $dynamicData['addons'];
+    }
+}
+
+/**
+ * Helper function to retrieve configuration values using dot notation
+ */
+function config(string $key, $default = null)
+{
+    global $config;
+
+    $segments = explode('.', $key);
+    $current = $config;
+
+    foreach ($segments as $segment) {
+        if (!is_array($current) || !array_key_exists($segment, $current)) {
+            return $default;
+        }
+        $current = $current[$segment];
+    }
+
+    return $current;
+}
+
+/**
+ * Helper function to evaluate current Web Operating Hours in Asia/Jakarta (WIB)
+ */
+function getWebHoursState(): array
+{
+    $wh = config('web_hours', [
+        'enabled' => true,
+        'open' => '09:00',
+        'close' => '12:00',
+        'closed_message' => '♡ Maaf, jam operasional pemesanan Kedai Kyuti saat ini sedang tutup. Jam layanan pemesanan kami adalah pukul 09.00 - 12.00 WIB. Kamu tetap bisa melihat-lihat menu terlebih dahulu ya! ♡',
+        'allow_browsing' => true,
+        'force_status' => 'auto',
+    ]);
+
+    $force = $wh['force_status'] ?? 'auto';
+    $enabled = !empty($wh['enabled']);
+
+    $now = new DateTime('now', new DateTimeZone('Asia/Jakarta'));
+    $currentHi = $now->format('H:i');
+
+    $isOpen = true;
+    if ($force === 'open') {
+        $isOpen = true;
+    } elseif ($force === 'closed') {
+        $isOpen = false;
+    } elseif ($enabled) {
+        $open = $wh['open'] ?? '09:00';
+        $close = $wh['close'] ?? '12:00';
+        if ($open <= $close) {
+            $isOpen = ($currentHi >= $open && $currentHi <= $close);
+        } else {
+            $isOpen = ($currentHi >= $open || $currentHi <= $close);
+        }
+    }
+
+    return [
+        'enabled' => $enabled,
+        'isOpen' => $isOpen,
+        'statusText' => $isOpen ? 'Buka' : 'Tutup',
+        'open' => $wh['open'] ?? '09:00',
+        'close' => $wh['close'] ?? '12:00',
+        'hoursText' => ($wh['open'] ?? '09:00') . ' - ' . ($wh['close'] ?? '12:00') . ' WIB',
+        'closedMessage' => $wh['closed_message'] ?? '',
+        'forceStatus' => $force,
+        'currentWib' => $currentHi,
+    ];
+}

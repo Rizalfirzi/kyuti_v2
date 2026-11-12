@@ -1,0 +1,270 @@
+[
+  {
+    "orderCode": "KYUTI-42340",
+    "kopkenOrderNo": "89999",
+    "customerName": "Sarah",
+    "customerPhone": "081299881122",
+    "outletCode": "LA.CODEFIN",
+    "outletName": "Kopi Kenangan Codefin Kemang",
+    "pickupTime": "Sekarang",
+    "notes": "",
+    "status": "diproses",
+    "statusText": "Pesanan Diproses",
+    "statusDesc": "Pesanan kamu sedang diproses oleh outlet.",
+    "proofPhotoUrl": "https://images.unsplash.com/photo-1541167760496-1628856ab772?q=80&w=600&auto=format&fit=crop",
+    "statusHistory": [
+      {
+        "status": "diterima",
+        "title": "Pesanan Diterima",
+        "desc": "Pesanan kamu sudah kami terima.",
+        "time": "19.08",
+        "timestamp": 1794485293387
+      },
+      {
+        "status": "diproses",
+        "title": "Pesanan Diproses",
+        "desc": "Pesanan kamu sedang diproses oleh outlet.",
+        "time": "19.08",
+        "timestamp": 1794485299377,
+        "proofPhotoUrl": "https://images.unsplash.com/photo-1541167760496-1628856ab772?q=80&w=600&auto=format&fit=crop"
+      }
+    ],
+    "items": [
+      {
+        "price": 33000,
+        "subtotal": 33000,
+        "name": "PAKET BUNDLING 2 CUP LARGE",
+        "bundleChoices": "Kenangan Milk Tea + Thai Tea Loaded",
+        "qty": 1
+      }
+    ],
+    "subtotal": 33000,
+    "plasticBagQty": 1,
+    "plasticBagFee": 1000,
+    "singleItemFee": 0,
+    "total": 34000,
+    "createdAt": "2026-11-12T12:08:13.387Z",
+    "updatedAt": "2026-11-12T12:08:19.377Z"
+  },
+  {
+    "orderCode": "KYUTI-80537",
+    "kopkenOrderNo": "80537",
+    "customerName": "Alya",
+    "customerPhone": "08123456789",
+    "outletCode": "LA.CODEFIN",
+    "outletName": "Kopi Kenangan Codefin Kemang",
+    "pickupTime": "14.30 WIB",
+    "status": "diproses",
+    "statusText": "Pesanan Diproses",
+    "statusDesc": "Pesanan kamu sedang diproses oleh outlet.",
+    "proofPhotoUrl": "https://images.unsplash.com/photo-1541167760496-1628856ab772?q=80&w=600&auto=format&fit=crop",
+    "statusHistory": [
+      {
+        "status": "diterima",
+        "title": "Pesanan Diterima",
+        "desc": "Pesanan kamu sudah kami terima.",
+        "time": "14.20",
+        "timestamp": 1794478084952
+      },
+      {
+        "status": "diproses",
+        "title": "Pesanan Diproses",
+        "desc": "Pesanan kamu sedang diproses oleh outlet.",
+        "time": "14.23",
+        "timestamp": 1794481684952,
+        "proofPhotoUrl": "https://images.unsplash.com/photo-1541167760496-1628856ab772?q=80&w=600&auto=format&fit=crop"
+      }
+    ],
+    "items": [
+      {
+        "name": "Kenangan Milk Tea (L)",
+        "qty": 1,
+        "price": 18000,
+        "subtotal": 18000,
+        "size": "Large",
+        "sugar": "Less Sugar",
+        "ice": "Normal Ice"
+      }
+    ],
+    "subtotal": 18000,
+    "total": 18000,
+    "createdAt": "2026-11-12T10:08:04.952Z",
+    "updatedAt": "2026-11-12T11:08:04.954Z"
+  },
+  {
+    "orderCode": "KYUTI-80512",
+    "kopkenOrderNo": "80512",
+    "customerName": "Bima",
+    "customerPhone": "08198765432",
+    "outletCode": "LA.CODEFIN",
+    "outletName": "Kopi Kenangan Codefin Kemang",
+    "pickupTime": "15.30 WIB",
+    "status": "siap",
+    "statusText": "Siap Diambil",
+    "statusDesc": "Pesanan kamu sudah selesai dan siap untuk diambil.",
+    "proofPhotoUrl": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=600&auto=format&fit=crop",
+    "statusHistory": [
+      {
+        "status": "diterima",
+        "title": "Pesanan Diterima",
+        "desc": "Pesanan kamu sudah kami terima.",
+        "time": "14.20",
+        "timestamp": 1794474484954
+      },
+      {
+        "status": "diproses",
+        "title": "Pesanan Diproses",
+        "desc": "Pesanan kamu sedang diproses oleh outlet.",
+        "time": "14.23",
+        "timestamp": 1794478084954
+      },
+      {
+        "status": "disiapkan",
+        "title": "Sedang Disiapkan",
+        "desc": "Barista sedang menyiapkan pesanan kamu.",
+        "time": "14.28",
+        "timestamp": 1794481684954
+      },
+      {
+        "status": "siap",
+        "title": "Siap Diambil",
+        "desc": "Pesanan kamu sudah selesai dan siap untuk diambil.",
+        "time": "14.35",
+        "timestamp": 1794483484954,
+        "proofPhotoUrl": "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?q=80&w=600&auto=format&fit=crop"
+      }
+    ],
+    "items": [
+      {
+        "name": "Kopi Kenangan Mantan (R)",
+        "qty": 2,
+        "price": 15500,
+        "subtotal": 31000,
+        "size": "Regular",
+        "sugar": "Normal Sugar",
+        "ice": "Normal Ice"
+      }
+    ],
+    "subtotal": 31000,
+    "total": 31000,
+    "createdAt": "2026-11-12T09:08:04.954Z",
+    "updatedAt": "2026-11-12T11:38:04.954Z"
+  },
+  {
+    "orderCode": "KYUTI-80498",
+    "kopkenOrderNo": "80498",
+    "customerName": "Dita",
+    "customerPhone": "085711223344",
+    "outletCode": "LA.CODEFIN",
+    "outletName": "Kopi Kenangan Codefin Kemang",
+    "pickupTime": "15.00 WIB",
+    "status": "disiapkan",
+    "statusText": "Sedang Disiapkan",
+    "statusDesc": "Barista sedang menyiapkan pesanan kamu.",
+    "proofPhotoUrl": "https://images.unsplash.com/photo-1572442388796-11668a67e53d?q=80&w=600&auto=format&fit=crop",
+    "statusHistory": [
+      {
+        "status": "diterima",
+        "title": "Pesanan Diterima",
+        "desc": "Pesanan kamu sudah kami terima.",
+        "time": "14.10",
+        "timestamp": 1794478084954
+      },
+      {
+        "status": "disiapkan",
+        "title": "Sedang Disiapkan",
+        "desc": "Barista sedang menyiapkan pesanan kamu.",
+        "time": "14.55",
+        "timestamp": 1794484084954
+      }
+    ],
+    "items": [
+      {
+        "name": "Dutch Choco Frappe",
+        "qty": 1,
+        "price": 26000,
+        "subtotal": 26000
+      }
+    ],
+    "subtotal": 26000,
+    "total": 26000,
+    "createdAt": "2026-11-12T10:08:04.954Z",
+    "updatedAt": "2026-11-12T11:48:04.954Z"
+  },
+  {
+    "orderCode": "KYUTI-80476",
+    "kopkenOrderNo": "80476",
+    "customerName": "Rafi",
+    "customerPhone": "081399887766",
+    "outletCode": "LA.CODEFIN",
+    "outletName": "Kopi Kenangan Codefin Kemang",
+    "pickupTime": "14.45 WIB",
+    "status": "diterima",
+    "statusText": "Pesanan Diterima",
+    "statusDesc": "Pesanan kamu sudah kami terima.",
+    "proofPhotoUrl": "https://images.unsplash.com/photo-1509785307050-d4066910ec1e?q=80&w=600&auto=format&fit=crop",
+    "statusHistory": [
+      {
+        "status": "diterima",
+        "title": "Pesanan Diterima",
+        "desc": "Pesanan kamu sudah kami terima.",
+        "time": "14.30",
+        "timestamp": 1794483784954
+      }
+    ],
+    "items": [
+      {
+        "name": "Americano (L)",
+        "qty": 1,
+        "price": 15000,
+        "subtotal": 15000
+      }
+    ],
+    "subtotal": 15000,
+    "total": 15000,
+    "createdAt": "2026-11-12T11:43:04.954Z",
+    "updatedAt": "2026-11-12T11:43:04.954Z"
+  },
+  {
+    "orderCode": "KYUTI-80461",
+    "kopkenOrderNo": "80461",
+    "customerName": "Citra",
+    "customerPhone": "087788990011",
+    "outletCode": "LA.CODEFIN",
+    "outletName": "Kopi Kenangan Codefin Kemang",
+    "pickupTime": "14.00 WIB",
+    "status": "siap",
+    "statusText": "Siap Diambil",
+    "statusDesc": "Pesanan kamu sudah selesai dan siap untuk diambil.",
+    "proofPhotoUrl": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=600&auto=format&fit=crop",
+    "statusHistory": [
+      {
+        "status": "diterima",
+        "title": "Pesanan Diterima",
+        "desc": "Pesanan kamu sudah kami terima.",
+        "time": "13.15",
+        "timestamp": 1794470884954
+      },
+      {
+        "status": "siap",
+        "title": "Siap Diambil",
+        "desc": "Pesanan kamu sudah selesai dan siap untuk diambil.",
+        "time": "13.45",
+        "timestamp": 1794474484954,
+        "proofPhotoUrl": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=600&auto=format&fit=crop"
+      }
+    ],
+    "items": [
+      {
+        "name": "Avocado Coffee",
+        "qty": 2,
+        "price": 24000,
+        "subtotal": 48000
+      }
+    ],
+    "subtotal": 48000,
+    "total": 48000,
+    "createdAt": "2026-11-12T08:08:04.954Z",
+    "updatedAt": "2026-11-12T09:08:04.954Z"
+  }
+]

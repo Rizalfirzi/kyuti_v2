@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   PlusCircle,
+  PlusSquare,
   FileBarChart,
   Settings,
   LogOut,
@@ -889,14 +890,15 @@ export default function AdminPage() {
           <nav className="space-y-2">
             {/* 1. Dashboard */}
             <button
+              type="button"
               onClick={() => {
                 setActiveMenu('dashboard');
                 setMobileSidebarOpen(false);
               }}
-              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left border-0 ${
                 activeMenu === 'dashboard'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
+                  : 'bg-transparent text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'dashboard' && (
@@ -908,14 +910,15 @@ export default function AdminPage() {
 
             {/* 2. Pesanan (Daftar Pesanan - Active in Ref Image) */}
             <button
+              type="button"
               onClick={() => {
                 setActiveMenu('orders');
                 setMobileSidebarOpen(false);
               }}
-              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left border-0 ${
                 activeMenu === 'orders'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
+                  : 'bg-transparent text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'orders' && (
@@ -927,26 +930,28 @@ export default function AdminPage() {
 
             {/* 3. Tambah Pesanan (Quick Action) */}
             <button
+              type="button"
               onClick={() => {
                 openCreateModal();
                 setMobileSidebarOpen(false);
               }}
-              className="relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-white/50 transition text-left"
+              className="relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold text-gray-700 hover:text-[#E92D79] hover:bg-white/50 transition text-left border-0 bg-transparent"
             >
-              <PlusCircle className="w-4 h-4 text-gray-600" />
+              <PlusSquare className="w-4 h-4 text-gray-600 stroke-[1.8]" />
               <span>Tambah Pesanan</span>
             </button>
 
             {/* 4. Laporan */}
             <button
+              type="button"
               onClick={() => {
                 setActiveMenu('reports');
                 setMobileSidebarOpen(false);
               }}
-              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left border-0 ${
                 activeMenu === 'reports'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
+                  : 'bg-transparent text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'reports' && (
@@ -958,14 +963,15 @@ export default function AdminPage() {
 
             {/* 5. Pengaturan (Semua isi _legacy_php) */}
             <button
+              type="button"
               onClick={() => {
                 setActiveMenu('settings');
                 setMobileSidebarOpen(false);
               }}
-              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left ${
+              className={`relative w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-bold transition text-left border-0 ${
                 activeMenu === 'settings'
                   ? 'bg-[#FFE8F0] text-[#E92D79]'
-                  : 'text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
+                  : 'bg-transparent text-gray-700 hover:text-[#E92D79] hover:bg-white/50'
               }`}
             >
               {activeMenu === 'settings' && (
@@ -985,8 +991,9 @@ export default function AdminPage() {
           </div>
 
           <button
+            type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-white/50 transition text-left"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold text-gray-700 hover:text-red-600 hover:bg-white/50 transition text-left border-0 bg-transparent"
           >
             <LogOut className="w-4 h-4" />
             <span>Keluar</span>
@@ -1035,18 +1042,12 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 self-start sm:self-auto">
-                <button
-                  onClick={fetchOrders}
-                  title="Refresh Data"
-                  className="p-2.5 bg-gray-50 hover:bg-pink-50 text-gray-600 hover:text-[#E92D79] rounded-2xl border border-gray-200/80 transition"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#E92D79]' : ''}`} />
-                </button>
+              <div className="self-start sm:self-auto">
                 <div className="relative">
                   <button
+                    type="button"
                     onClick={openCreateModal}
-                    className="px-6 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] text-white font-bold text-xs rounded-full shadow-[0_6px_20px_rgba(233,45,121,0.35)] transition flex items-center gap-1.5 active:scale-95"
+                    className="px-6 py-2.5 bg-[#E92D79] hover:bg-[#D81B60] text-white font-bold text-xs rounded-full shadow-[0_6px_20px_rgba(233,45,121,0.35)] transition flex items-center gap-1.5 active:scale-95 border-0"
                   >
                     <span className="text-base font-bold leading-none">+</span> Tambah Pesanan
                   </button>
@@ -1099,11 +1100,12 @@ export default function AdminPage() {
                 return (
                   <button
                     key={tab.label}
+                    type="button"
                     onClick={() => {
                       setActiveFilter(tab.label);
                       setCurrentPage(1);
                     }}
-                    className={`px-5 py-2 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center ${
+                    className={`px-5 py-2 rounded-full text-xs font-bold transition whitespace-nowrap flex items-center border-0 ${
                       isActive
                         ? 'bg-[#E92D79] text-white shadow-xs'
                         : 'bg-[#FFF0F5] hover:bg-[#FFE4EE] text-gray-700'
@@ -1129,13 +1131,16 @@ export default function AdminPage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#FFF0F5] border-b border-pink-100 text-gray-900 font-bold">
                   <tr>
-                    <th className="py-4 px-5">No.</th>
-                    <th className="py-4 px-5">Nomor Order Kopi Kenangan</th>
-                    <th className="py-4 px-5">Nama Customer</th>
-                    <th className="py-4 px-5">Status Pesanan</th>
-                    <th className="py-4 px-5">Foto Bukti</th>
-                    <th className="py-4 px-5">Waktu Update</th>
-                    <th className="py-4 px-5 text-center">Aksi</th>
+                    <th className="py-4 px-6 w-14">No.</th>
+                    <th className="py-4 px-6">
+                      <div>Nomor Order</div>
+                      <div className="font-normal text-[11px] text-gray-500">Kopi Kenangan</div>
+                    </th>
+                    <th className="py-4 px-6">Nama Customer</th>
+                    <th className="py-4 px-6">Status Pesanan</th>
+                    <th className="py-4 px-6">Foto Bukti</th>
+                    <th className="py-4 px-6">Waktu Update</th>
+                    <th className="py-4 px-6 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1162,11 +1167,11 @@ export default function AdminPage() {
 
                       return (
                         <tr key={order.orderCode} className="hover:bg-[#FFF9FB] transition">
-                          <td className="py-4 px-5 font-bold text-gray-700">{startIndex + idx + 1}</td>
-                          <td className="py-4 px-5 font-black text-gray-900 tracking-wide text-xs">{displayNo}</td>
-                          <td className="py-4 px-5 font-bold text-gray-800 text-xs">{order.customerName}</td>
-                          <td className="py-4 px-5">{renderStatusBadge(order.status)}</td>
-                          <td className="py-4 px-5">
+                          <td className="py-4 px-6 font-bold text-gray-700">{startIndex + idx + 1}</td>
+                          <td className="py-4 px-6 font-black text-gray-900 tracking-wide text-xs">{displayNo}</td>
+                          <td className="py-4 px-6 font-bold text-gray-800 text-xs">{order.customerName}</td>
+                          <td className="py-4 px-6">{renderStatusBadge(order.status)}</td>
+                          <td className="py-4 px-6">
                             {photo ? (
                               <a
                                 href={photo}
@@ -1182,31 +1187,33 @@ export default function AdminPage() {
                               </div>
                             )}
                           </td>
-                          <td className="py-4 px-5 text-gray-700 font-medium">
+                          <td className="py-4 px-6 text-gray-700 font-medium">
                             {formatUpdatedAt(order.updatedAt || order.createdAt)}
                           </td>
-                          <td className="py-4 px-5">
-                            <div className="flex items-center justify-center gap-3.5">
+                          <td className="py-4 px-6">
+                            <div className="flex items-center justify-center gap-4">
                               {/* View Tracking Link */}
                               <a
                                 href={`/track/${order.kopkenOrderNo || order.orderCode}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 title="Buka Link Tracking Customer"
-                                className="text-gray-700 hover:text-black transition"
+                                className="text-gray-600 hover:text-black transition"
                               >
                                 <Eye className="w-4 h-4 stroke-[1.8]" />
                               </a>
                               {/* Edit Modal Button */}
                               <button
+                                type="button"
                                 onClick={() => openEditModal(order)}
                                 title="Edit Status & Foto Bukti"
-                                className="text-gray-700 hover:text-blue-600 transition"
+                                className="text-gray-600 hover:text-blue-600 transition"
                               >
                                 <Pencil className="w-4 h-4 stroke-[1.8]" />
                               </button>
                               {/* Delete Order Button */}
                               <button
+                                type="button"
                                 onClick={() => handleDeleteOrder(order.orderCode)}
                                 title="Hapus Pesanan"
                                 className="text-[#E92D79] hover:text-red-700 transition"
@@ -1230,17 +1237,19 @@ export default function AdminPage() {
               </p>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={safeCurrentPage <= 1}
-                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold"
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold border-0"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
                   <button
                     key={pNum}
+                    type="button"
                     onClick={() => setCurrentPage(pNum)}
-                    className={`w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center transition ${
+                    className={`w-8 h-8 rounded-xl text-xs font-bold flex items-center justify-center transition border-0 ${
                       pNum === safeCurrentPage
                         ? 'bg-[#E92D79] text-white shadow-xs'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -1250,9 +1259,10 @@ export default function AdminPage() {
                   </button>
                 ))}
                 <button
+                  type="button"
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safeCurrentPage >= totalPages}
-                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold"
+                  className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center disabled:opacity-30 disabled:hover:bg-gray-100 transition text-xs font-bold border-0"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>

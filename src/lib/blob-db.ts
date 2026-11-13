@@ -1,11 +1,69 @@
 import { put, list, del, head } from '@vercel/blob';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { Order, OrderStatus, StatusHistoryItem } from './types';
 
 const LOCAL_DATA_DIR = path.join(process.cwd(), 'data');
 const LOCAL_ORDERS_FILE = path.join(LOCAL_DATA_DIR, 'orders.json');
 const LOCAL_UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+const TMP_ORDERS_FILE = path.join(os.tmpdir(), 'kyuti_orders.json');
+const BLOB_INDEX_PATH = 'orders/index.json';
+
+// In-memory cache for serverless warm container instances
+let memoryOrders: Order[] | null = null;
+
+// Helpers for Upstash Redis / Vercel KV REST API zero-dependency persistence
+function getKvConfig() {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) {
+    return { url, token };
+  }
+  return null;
+}
+
+async function fetchFromKv(): Promise<Order[] | null> {
+  const config = getKvConfig();
+  if (!config) return null;
+  try {
+    const res = await fetch(`${config.url}/get/kyuti_orders`, {
+      headers: { Authorization: `Bearer ${config.token}` },
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.result) {
+        const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('KV read error:', e);
+  }
+  return null;
+}
+
+async function saveToKv(orders: Order[]): Promise<boolean> {
+  const config = getKvConfig();
+  if (!config) return false;
+  try {
+    const res = await fetch(`${config.url}/set/kyuti_orders`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(orders),
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('KV write error:', e);
+    return false;
+  }
+}
 
 // Ensure local directories exist
 function ensureLocalDirs() {
@@ -246,8 +304,6 @@ const SAMPLE_ORDERS: Order[] = [
   },
 ];
 
-const BLOB_INDEX_PATH = 'orders/index.json';
-
 export class OrderStore {
   private static hasBlobToken(): boolean {
     return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
@@ -257,56 +313,96 @@ export class OrderStore {
    * Get all orders
    */
   static async getAllOrders(): Promise<Order[]> {
+    // 1. Hot memory cache (fastest, keeps state alive during warm lambda instances)
+    if (memoryOrders && Array.isArray(memoryOrders) && memoryOrders.length > 0) {
+      return memoryOrders;
+    }
+
+    // 2. Upstash Redis / Vercel KV REST API if configured
+    const kvOrders = await fetchFromKv();
+    if (kvOrders && kvOrders.length > 0) {
+      memoryOrders = kvOrders;
+      return kvOrders;
+    }
+
+    // 3. Vercel Blob if token exists
     if (this.hasBlobToken()) {
       try {
-        // Fetch index from Vercel Blob
         const { blobs } = await list({ prefix: 'orders/' });
         const indexBlob = blobs.find((b) => b.pathname === BLOB_INDEX_PATH);
         if (indexBlob) {
           const res = await fetch(indexBlob.url, { cache: 'no-store' });
           if (res.ok) {
             const data: Order[] = await res.json();
-            return data;
+            if (Array.isArray(data) && data.length > 0) {
+              memoryOrders = data;
+              return data;
+            }
           }
         }
       } catch (err) {
-        console.warn('Vercel Blob read error, falling back to local:', err);
+        console.warn('Vercel Blob read error, falling back to tmp/local:', err);
       }
     }
 
-    // Local fallback
-    ensureLocalDirs();
-    if (!fs.existsSync(LOCAL_ORDERS_FILE)) {
-      try {
-        fs.writeFileSync(LOCAL_ORDERS_FILE, JSON.stringify(SAMPLE_ORDERS, null, 2), 'utf-8');
-      } catch (err) {
-        // Read-only filesystem in serverless environments (Vercel)
-      }
-      return SAMPLE_ORDERS;
-    }
-
+    // 4. Writable /tmp directory on Vercel Serverless
     try {
-      const content = fs.readFileSync(LOCAL_ORDERS_FILE, 'utf-8');
-      const parsed = JSON.parse(content);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return SAMPLE_ORDERS;
+      if (fs.existsSync(TMP_ORDERS_FILE)) {
+        const tmpRaw = fs.readFileSync(TMP_ORDERS_FILE, 'utf-8');
+        const parsed = JSON.parse(tmpRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryOrders = parsed;
+          return parsed;
+        }
+      }
+    } catch (tmpErr) {
+      // ignore
     }
+
+    // 5. Local file fallback from project repository (data/orders.json)
+    try {
+      if (fs.existsSync(LOCAL_ORDERS_FILE)) {
+        const content = fs.readFileSync(LOCAL_ORDERS_FILE, 'utf-8');
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryOrders = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // read-only or not found
+    }
+
+    memoryOrders = SAMPLE_ORDERS;
+    return SAMPLE_ORDERS;
   }
 
   /**
    * Save all orders (used internally to sync index)
    */
   static async saveAllOrders(orders: Order[]): Promise<void> {
-    // 1. Always save locally
+    // 1. Always update in-memory hot cache
+    memoryOrders = [...orders];
+
+    // 2. Save to writable /tmp on serverless environments
+    try {
+      fs.writeFileSync(TMP_ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
+    } catch (tmpErr) {
+      console.warn('Could not write /tmp orders file:', tmpErr);
+    }
+
+    // 3. Try to save to local data/orders.json (works in dev / localhost)
     try {
       ensureLocalDirs();
       fs.writeFileSync(LOCAL_ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8');
     } catch (e) {
-      console.warn('Could not write local orders file:', e);
+      // Expected on Vercel read-only filesystem
     }
 
-    // 2. Save to Vercel Blob if token exists
+    // 4. Save to Upstash Redis / Vercel KV REST API if configured
+    await saveToKv(orders);
+
+    // 5. Save to Vercel Blob if token exists
     if (this.hasBlobToken()) {
       try {
         await put(BLOB_INDEX_PATH, JSON.stringify(orders, null, 2), {

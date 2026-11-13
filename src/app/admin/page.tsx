@@ -87,10 +87,38 @@ export default function AdminPage() {
   const [syncingTikTok, setSyncingTikTok] = useState(false);
 
   // =========================================================================
+  // CLIENT STORAGE CACHE (Guarantees instant persistence across Vercel cold starts)
+  // =========================================================================
+  const CLIENT_ORDERS_KEY = 'kyuti_admin_orders_v2';
+
+  const saveClientOrdersCache = (ordersList: Order[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(CLIENT_ORDERS_KEY, JSON.stringify(ordersList));
+    } catch (e) {}
+  };
+
+  const getClientOrdersCache = (): Order[] | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(CLIENT_ORDERS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  // =========================================================================
   // LIFECYCLE & DATA LOADING
   // =========================================================================
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const cached = getClientOrdersCache();
+      if (cached && cached.length > 0) {
+        setOrders(cached);
+      }
       const auth = localStorage.getItem('kyuti_admin_auth');
       const searchParams = new URLSearchParams(window.location.search);
       if (auth === '1' || searchParams.get('code')?.toUpperCase() === 'WHOSUTII26') {
@@ -138,11 +166,37 @@ export default function AdminPage() {
       setLoadingOrders(true);
       const res = await fetch('/api/orders', { cache: 'no-store' });
       const data = await res.json();
-      if (data.success) {
-        setOrders(data.orders || []);
+      if (data.success && Array.isArray(data.orders)) {
+        const cached = getClientOrdersCache();
+        if (cached && cached.length > 0) {
+          // Merge server orders with cached updates: newer edit wins
+          const merged = data.orders.map((serverOrder: Order) => {
+            const match = cached.find((c) => c.orderCode === serverOrder.orderCode);
+            if (!match) return serverOrder;
+            const serverTime = new Date(serverOrder.updatedAt || serverOrder.createdAt || 0).getTime();
+            const clientTime = new Date(match.updatedAt || match.createdAt || 0).getTime();
+            return clientTime >= serverTime ? match : serverOrder;
+          });
+          // Also keep any orders created locally that aren't on server yet
+          cached.forEach((c) => {
+            if (!merged.some((m: Order) => m.orderCode === c.orderCode)) {
+              merged.unshift(c);
+            }
+          });
+          setOrders(merged);
+          saveClientOrdersCache(merged);
+        } else {
+          setOrders(data.orders);
+          saveClientOrdersCache(data.orders);
+        }
+      } else {
+        const cached = getClientOrdersCache();
+        if (cached) setOrders(cached);
       }
     } catch (err) {
       console.warn('Gagal memuat pesanan:', err);
+      const cached = getClientOrdersCache();
+      if (cached) setOrders(cached);
     } finally {
       setLoadingOrders(false);
     }
@@ -323,8 +377,18 @@ export default function AdminPage() {
         const data = await res.json();
         if (data.success) {
           showNotification('Pesanan berhasil ditambahkan! 🌸');
+          const createdOrder: Order = data.order || {
+            ...payload,
+            orderCode: `KYUTI-${formKopkenNo.trim()}`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setOrders((prev) => {
+            const next = [createdOrder, ...prev.filter((o) => o.orderCode !== createdOrder.orderCode)];
+            saveClientOrdersCache(next);
+            return next;
+          });
           setModalOpen(false);
-          fetchOrders();
         } else {
           alert(data.message || 'Gagal menyimpan pesanan');
         }
@@ -345,8 +409,20 @@ export default function AdminPage() {
         const data = await res.json();
         if (data.success) {
           showNotification('Pesanan berhasil diperbarui! ✨');
+          const updatedOrder: Order = data.order || {
+            ...editingOrder,
+            kopkenOrderNo: formKopkenNo.trim(),
+            customerName: formCustomerName.trim(),
+            status: formStatus,
+            proofPhotoUrl: formPhotoUrl,
+            updatedAt: new Date().toISOString(),
+          };
+          setOrders((prev) => {
+            const next = prev.map((o) => (o.orderCode === updatedOrder.orderCode ? updatedOrder : o));
+            saveClientOrdersCache(next);
+            return next;
+          });
           setModalOpen(false);
-          fetchOrders();
         } else {
           alert(data.message || 'Gagal memperbarui pesanan');
         }
@@ -368,7 +444,11 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         showNotification('Pesanan berhasil dihapus.');
-        fetchOrders();
+        setOrders((prev) => {
+          const next = prev.filter((o) => o.orderCode !== orderCode);
+          saveClientOrdersCache(next);
+          return next;
+        });
       } else {
         alert(data.message || 'Gagal menghapus pesanan');
       }

@@ -9,11 +9,15 @@ const LOCAL_UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
 
 // Ensure local directories exist
 function ensureLocalDirs() {
-  if (!fs.existsSync(LOCAL_DATA_DIR)) {
-    fs.mkdirSync(LOCAL_DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(LOCAL_UPLOADS_DIR)) {
-    fs.mkdirSync(LOCAL_UPLOADS_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(LOCAL_DATA_DIR)) {
+      fs.mkdirSync(LOCAL_DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(LOCAL_UPLOADS_DIR)) {
+      fs.mkdirSync(LOCAL_UPLOADS_DIR, { recursive: true });
+    }
+  } catch (err) {
+    // Read-only filesystem in serverless environments (Vercel)
   }
 }
 
@@ -273,7 +277,11 @@ export class OrderStore {
     // Local fallback
     ensureLocalDirs();
     if (!fs.existsSync(LOCAL_ORDERS_FILE)) {
-      fs.writeFileSync(LOCAL_ORDERS_FILE, JSON.stringify(SAMPLE_ORDERS, null, 2), 'utf-8');
+      try {
+        fs.writeFileSync(LOCAL_ORDERS_FILE, JSON.stringify(SAMPLE_ORDERS, null, 2), 'utf-8');
+      } catch (err) {
+        // Read-only filesystem in serverless environments (Vercel)
+      }
       return SAMPLE_ORDERS;
     }
 
@@ -383,7 +391,7 @@ export class OrderStore {
   }
 
   /**
-   * Upload image file to Vercel Blob (or fallback to local /uploads)
+   * Upload image file to Vercel Blob (or fallback to local disk or Base64 Data URL)
    */
   static async uploadProofPhoto(
     fileBuffer: Buffer,
@@ -392,6 +400,7 @@ export class OrderStore {
   ): Promise<string> {
     const cleanFilename = `proof-${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
 
+    // 1. Save to Vercel Blob if token exists
     if (this.hasBlobToken()) {
       try {
         const blob = await put(`proofs/${cleanFilename}`, fileBuffer, {
@@ -400,15 +409,22 @@ export class OrderStore {
         });
         return blob.url;
       } catch (err) {
-        console.error('Vercel Blob put error, falling back to local file:', err);
+        console.error('Vercel Blob put error, falling back to local/base64:', err);
       }
     }
 
-    // Local fallback: write to public/uploads
-    ensureLocalDirs();
-    const filePath = path.join(LOCAL_UPLOADS_DIR, cleanFilename);
-    fs.writeFileSync(filePath, fileBuffer);
-    return `/uploads/${cleanFilename}`;
+    // 2. Try writing to local disk (development / standalone environment)
+    try {
+      ensureLocalDirs();
+      const filePath = path.join(LOCAL_UPLOADS_DIR, cleanFilename);
+      fs.writeFileSync(filePath, fileBuffer);
+      return `/uploads/${cleanFilename}`;
+    } catch (fsErr: any) {
+      console.warn('Local filesystem is read-only (Vercel serverless). Using Base64 Data URL fallback:', fsErr.message);
+      // 3. Fallback to Base64 Data URL so upload never fails even without Vercel Blob configured
+      const base64 = fileBuffer.toString('base64');
+      return `data:${contentType};base64,${base64}`;
+    }
   }
 }
 

@@ -3,10 +3,13 @@ import { OrderStore } from '@/lib/blob-db';
 import { Order, OrderStatus, StatusHistoryItem } from '@/lib/types';
 import { STORE_CONFIG } from '@/lib/kopken-api';
 
-function formatTime(date: Date = new Date()): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}.${minutes}`;
+function formatWibTime(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date).replace(':', '.');
 }
 
 const STATUS_TEXT_MAP: Record<OrderStatus, { title: string; desc: string }> = {
@@ -52,7 +55,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const now = new Date();
-    const currentTimeStr = formatTime(now);
+    const currentTimeStr = body.statusTime ? String(body.statusTime).trim() : formatWibTime(now);
 
     const randomSuffix = Math.floor(10000 + Math.random() * 90000).toString();
     const kopkenNo = body.kopkenOrderNo ? String(body.kopkenOrderNo).trim() : randomSuffix;

@@ -14,6 +14,8 @@ interface OrderModalProps {
   setFormCustomerName: (val: string) => void;
   formStatus: OrderStatus;
   setFormStatus: (val: OrderStatus) => void;
+  formStatusTime: string;
+  setFormStatusTime: (val: string) => void;
   formPhotoUrl: string;
   setFormPhotoUrl: (val: string) => void;
   onPhotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -33,6 +35,8 @@ export function OrderModal({
   setFormCustomerName,
   formStatus,
   setFormStatus,
+  formStatusTime,
+  setFormStatusTime,
   formPhotoUrl,
   setFormPhotoUrl,
   onPhotoUpload,
@@ -94,23 +98,39 @@ export function OrderModal({
             </div>
           </div>
 
-          {/* Status Pesanan */}
-          <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1.5">
-              Status Pesanan <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formStatus}
-              onChange={(e) => setFormStatus(e.target.value as OrderStatus)}
-              className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] font-semibold transition text-xs"
-            >
-              <option value="diterima">Pesanan Diterima</option>
-              <option value="diproses">Pesanan Diproses</option>
-              <option value="disiapkan">Sedang Disiapkan</option>
-              <option value="siap">Siap Diambil</option>
-              <option value="diantar">Pesanan Diantar 🛵</option>
-              <option value="selesai">Pesanan Diterima / Selesai 🎉</option>
-            </select>
+          {/* Status Pesanan & Jam Update Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                Status Pesanan <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formStatus}
+                onChange={(e) => setFormStatus(e.target.value as OrderStatus)}
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] font-semibold transition text-xs"
+              >
+                <option value="diterima">Pesanan Diterima</option>
+                <option value="diproses">Pesanan Diproses</option>
+                <option value="disiapkan">Sedang Disiapkan</option>
+                <option value="siap">Siap Diambil</option>
+                <option value="diantar">Pesanan Diantar 🛵</option>
+                <option value="selesai">Pesanan Diterima / Selesai 🎉</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center justify-between">
+                <span>Jam Status (WIB)</span>
+                <span className="text-[10px] text-pink-500 font-medium">WIB Otomatis</span>
+              </label>
+              <input
+                type="text"
+                value={formStatusTime}
+                onChange={(e) => setFormStatusTime(e.target.value)}
+                placeholder="11.05"
+                className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E92D79]/20 focus:border-[#E92D79] font-bold text-gray-800 transition text-xs"
+              />
+            </div>
           </div>
 
           {/* Foto Bukti Pesanan */}

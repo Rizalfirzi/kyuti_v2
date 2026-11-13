@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [formKopkenNo, setFormKopkenNo] = useState('');
   const [formCustomerName, setFormCustomerName] = useState('');
   const [formStatus, setFormStatus] = useState<OrderStatus>('diproses');
+  const [formStatusTime, setFormStatusTime] = useState<string>('');
   const [formPhotoUrl, setFormPhotoUrl] = useState('');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -256,12 +257,22 @@ export default function AdminPage() {
   // =========================================================================
   // ORDER ACTIONS & MODALS
   // =========================================================================
+  const getCurrentWibTime = (): string => {
+    return new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date()).replace(':', '.');
+  };
+
   const openCreateModal = () => {
     setModalMode('create');
     setEditingOrder(null);
     setFormKopkenNo('');
     setFormCustomerName('');
     setFormStatus('diproses');
+    setFormStatusTime(getCurrentWibTime());
     setFormPhotoUrl('');
     setModalOpen(true);
   };
@@ -272,6 +283,7 @@ export default function AdminPage() {
     setFormKopkenNo(order.kopkenOrderNo || order.orderCode.replace('KYUTI-', ''));
     setFormCustomerName(order.customerName);
     setFormStatus(order.status);
+    setFormStatusTime(getCurrentWibTime());
     setFormPhotoUrl(order.proofPhotoUrl || '');
     setModalOpen(true);
   };
@@ -362,6 +374,7 @@ export default function AdminPage() {
           kopkenOrderNo: formKopkenNo.trim(),
           customerName: formCustomerName.trim(),
           status: formStatus,
+          statusTime: formStatusTime || getCurrentWibTime(),
           proofPhotoUrl: formPhotoUrl,
           outletCode: 'LA.CODEFIN',
           outletName: 'Kopi Kenangan Codefin Kemang',
@@ -397,6 +410,7 @@ export default function AdminPage() {
           kopkenOrderNo: formKopkenNo.trim(),
           customerName: formCustomerName.trim(),
           status: formStatus,
+          statusTime: formStatusTime || getCurrentWibTime(),
           proofPhotoUrl: formPhotoUrl,
         };
 
@@ -686,6 +700,8 @@ export default function AdminPage() {
         setFormCustomerName={setFormCustomerName}
         formStatus={formStatus}
         setFormStatus={setFormStatus}
+        formStatusTime={formStatusTime}
+        setFormStatusTime={setFormStatusTime}
         formPhotoUrl={formPhotoUrl}
         setFormPhotoUrl={setFormPhotoUrl}
         onPhotoUpload={handlePhotoUpload}

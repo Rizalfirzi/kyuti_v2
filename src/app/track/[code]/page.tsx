@@ -22,6 +22,24 @@ import {
 } from 'lucide-react';
 import { Order, OrderStatus } from '@/lib/types';
 
+function formatWibTime(dateInput?: Date | string | number): string {
+  if (!dateInput) return '';
+  try {
+    const date = typeof dateInput === 'string' || typeof dateInput === 'number'
+      ? new Date(dateInput)
+      : dateInput;
+    if (isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date).replace(':', '.');
+  } catch {
+    return '';
+  }
+}
+
 export default function TrackingPage() {
   const params = useParams();
   const router = useRouter();
@@ -321,7 +339,24 @@ export default function TrackingPage() {
 
               // Find matching history item for timestamp & proof photo
               const hist = order.statusHistory?.find((h) => h.status === step.key);
-              const stepTime = hist?.time || (isPassed || isCurrent ? '14.20' : '');
+              
+              // Calculate precise sequential step time (in WIB) based on actual create & edit history
+              let stepTime = '';
+              if (!isPending) {
+                if (hist?.timestamp) {
+                  stepTime = formatWibTime(hist.timestamp);
+                } else if (hist?.time) {
+                  stepTime = hist.time;
+                } else {
+                  // Fallback: interpolate logically between order creation and last update
+                  const startMs = order.createdAt ? new Date(order.createdAt).getTime() : Date.now() - 3600000;
+                  const endMs = order.updatedAt ? new Date(order.updatedAt).getTime() : Date.now();
+                  const fraction = Math.max(0, step.rank - 1) / Math.max(1, currentRank - 1);
+                  const interpolatedMs = startMs + (endMs - startMs) * fraction;
+                  stepTime = formatWibTime(interpolatedMs);
+                }
+              }
+
               const stepPhoto = hist?.proofPhotoUrl || (isCurrent ? order.proofPhotoUrl : null);
 
               const StepIcon = step.icon;
@@ -372,7 +407,7 @@ export default function TrackingPage() {
                     </p>
 
                     {/* Bukti Pesanan Card (Embedded inside the timeline step as in Image 1 & 2) */}
-                    {(isCurrent || (isPassed && step.key === 'diproses')) && stepPhoto && (
+                    {(isCurrent || hist?.proofPhotoUrl || (isPassed && step.key === 'diproses')) && stepPhoto && (
                       <div className="mt-3 bg-pink-50/50 rounded-2xl p-3 border border-pink-100/80">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-bold text-gray-700 flex items-center gap-1">

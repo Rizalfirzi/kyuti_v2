@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OrderStore } from '@/lib/blob-db';
 import { OrderStatus, StatusHistoryItem } from '@/lib/types';
 
-function formatTime(date: Date = new Date()): string {
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}.${minutes}`;
+function formatWibTime(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date).replace(':', '.');
 }
 
 const STATUS_TEXT_MAP: Record<OrderStatus, { title: string; desc: string }> = {
@@ -76,7 +79,7 @@ export async function PATCH(
 
     const body = await request.json();
     const now = new Date();
-    const currentTimeStr = formatTime(now);
+    const currentTimeStr = body.statusTime ? String(body.statusTime).trim() : formatWibTime(now);
 
     // Update customerName if provided
     if (body.customerName) {
@@ -94,7 +97,7 @@ export async function PATCH(
     }
 
     // Update status if provided
-    if (body.status && body.status !== order.status) {
+    if (body.status) {
       const newStatus = body.status as OrderStatus;
       const statusMeta = STATUS_TEXT_MAP[newStatus] || STATUS_TEXT_MAP.diproses;
 
@@ -102,7 +105,10 @@ export async function PATCH(
       order.statusText = statusMeta.title;
       order.statusDesc = statusMeta.desc;
 
-      const newHistoryItem: StatusHistoryItem = {
+      const historyList = Array.isArray(order.statusHistory) ? [...order.statusHistory] : [];
+      const existingIdx = historyList.findIndex((h) => h.status === newStatus);
+
+      const historyItem: StatusHistoryItem = {
         status: newStatus,
         title: statusMeta.title,
         desc: statusMeta.desc,
@@ -111,11 +117,25 @@ export async function PATCH(
         proofPhotoUrl: body.proofPhotoUrl || order.proofPhotoUrl || undefined,
       };
 
-      order.statusHistory = [...order.statusHistory, newHistoryItem];
-    } else if (body.proofPhotoUrl && order.statusHistory.length > 0) {
-      // Update proofPhotoUrl on the latest history entry
+      if (existingIdx >= 0) {
+        historyList[existingIdx] = {
+          ...historyList[existingIdx],
+          ...historyItem,
+        };
+      } else {
+        historyList.push(historyItem);
+      }
+
+      order.statusHistory = historyList;
+    } else if (order.statusHistory && order.statusHistory.length > 0) {
+      // Update proofPhotoUrl or statusTime on the latest history entry
       const lastIndex = order.statusHistory.length - 1;
-      order.statusHistory[lastIndex].proofPhotoUrl = body.proofPhotoUrl;
+      if (body.proofPhotoUrl) {
+        order.statusHistory[lastIndex].proofPhotoUrl = body.proofPhotoUrl;
+      }
+      if (body.statusTime) {
+        order.statusHistory[lastIndex].time = String(body.statusTime).trim();
+      }
     }
 
     order.updatedAt = now.toISOString();

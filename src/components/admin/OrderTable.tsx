@@ -143,14 +143,21 @@ export function OrderTable({
   const formatUpdatedAt = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
-      const day = d.getDate();
-      const month = months[d.getMonth()] || 'Okt';
-      const hours = String(d.getHours()).padStart(2, '0');
-      const mins = String(d.getMinutes()).padStart(2, '0');
-      return `${day} ${month} ${hours}.${mins}`;
+      if (isNaN(d.getTime())) return '-';
+      const dateFormatted = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        day: 'numeric',
+        month: 'short',
+      }).format(d);
+      const timeFormatted = new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).format(d).replace(':', '.');
+      return `${dateFormatted} ${timeFormatted}`;
     } catch {
-      return '23 Okt 15.43';
+      return '-';
     }
   };
 

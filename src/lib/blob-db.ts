@@ -65,6 +65,24 @@ async function saveToKv(orders: Order[]): Promise<boolean> {
   }
 }
 
+// Helper to automatically support both Public and Private Vercel Blob stores
+async function smartBlobPut(pathname: string, body: any, options: any = {}) {
+  try {
+    return await put(pathname, body, { ...options, access: 'public' });
+  } catch (err: any) {
+    const msg = (err?.message || '').toLowerCase();
+    if (
+      msg.includes('private') ||
+      msg.includes('access') ||
+      err?.name === 'BlobAccessError' ||
+      err?.name === 'BlobError'
+    ) {
+      return await put(pathname, body, { ...options, access: 'private' });
+    }
+    throw err;
+  }
+}
+
 // Ensure local directories exist
 function ensureLocalDirs() {
   try {
@@ -331,7 +349,14 @@ export class OrderStore {
         const { blobs } = await list({ prefix: 'orders/' });
         const indexBlob = blobs.find((b) => b.pathname === BLOB_INDEX_PATH);
         if (indexBlob) {
-          const res = await fetch(indexBlob.url, { cache: 'no-store' });
+          let res = await fetch(indexBlob.url, { cache: 'no-store' });
+          // If 403 or 401 (Private Blob Store), retry with Authorization header
+          if (!res.ok && (res.status === 403 || res.status === 401) && process.env.BLOB_READ_WRITE_TOKEN) {
+            res = await fetch(indexBlob.url, {
+              headers: { Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` },
+              cache: 'no-store',
+            });
+          }
           if (res.ok) {
             const data: Order[] = await res.json();
             if (Array.isArray(data) && data.length > 0) {
@@ -405,8 +430,7 @@ export class OrderStore {
     // 5. Save to Vercel Blob if token exists
     if (this.hasBlobToken()) {
       try {
-        await put(BLOB_INDEX_PATH, JSON.stringify(orders, null, 2), {
-          access: 'public',
+        await smartBlobPut(BLOB_INDEX_PATH, JSON.stringify(orders, null, 2), {
           contentType: 'application/json',
           addRandomSuffix: false,
         });
@@ -460,8 +484,7 @@ export class OrderStore {
     if (this.hasBlobToken()) {
       try {
         const orderPath = `orders/${order.orderCode}.json`;
-        await put(orderPath, JSON.stringify(order, null, 2), {
-          access: 'public',
+        await smartBlobPut(orderPath, JSON.stringify(order, null, 2), {
           contentType: 'application/json',
           addRandomSuffix: false,
         });
@@ -499,10 +522,13 @@ export class OrderStore {
     // 1. Save to Vercel Blob if token exists
     if (this.hasBlobToken()) {
       try {
-        const blob = await put(`proofs/${cleanFilename}`, fileBuffer, {
-          access: 'public',
+        const blob = await smartBlobPut(`proofs/${cleanFilename}`, fileBuffer, {
           contentType,
         });
+        // If the store is private, wrap with local proxy endpoint so browsers can render without 403 Forbidden!
+        if (blob.url.includes('.private.blob.vercel-storage.com')) {
+          return `/api/blob?url=${encodeURIComponent(blob.url)}`;
+        }
         return blob.url;
       } catch (err) {
         console.error('Vercel Blob put error, falling back to local/base64:', err);
